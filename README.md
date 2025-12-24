@@ -1127,17 +1127,19 @@ uv run infer.py --checkpoint checkpoints/20240101120000/final_model.pt --prompt 
 
 **What happens**:
 1. Loads model from checkpoint
-2. Loads tokenizer
+2. Automatically detects and loads the tokenizer type used during training (saved in checkpoint)
 3. Generates text from prompt
 4. Prints generated text
 
 **Options**:
 - `--checkpoint`: Path to model checkpoint (e.g., `checkpoints/20240101120000/final_model.pt`)
 - `--prompt`: Starting text prompt
-- `--max_new_tokens`: Number of tokens to generate
-- `--temperature`: Sampling temperature
+- `--max_new_tokens`: Number of tokens to generate (default: 200)
+- `--temperature`: Sampling temperature (default: 0.8)
 - `--top_k`: Top-k sampling (optional)
-- `--top_p`: Top-p sampling (optional)
+- `--top_p`: Top-p sampling (optional, default: 0.9)
+- `--tokenizer_type`: Tokenizer type (optional, auto-detected from checkpoint; only needed for old checkpoints)
+- `--text_file`: Text file for character tokenizer initialization (default: `training.txt`, only needed for character tokenizer)
 
 ---
 

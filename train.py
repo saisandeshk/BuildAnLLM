@@ -144,6 +144,7 @@ def main():
         X_val=X_val,
         Y_val=Y_val,
         device=device,
+        tokenizer_type=args.tokenizer_type,
     )
 
     # Start training
@@ -156,7 +157,8 @@ def main():
     print(f"Model saved to: {final_model_path}")
     print("\nTo generate text, run:")
     print(
-        f"  uv run infer.py --checkpoint {final_model_path} --prompt 'Your prompt here' --tokenizer_type {args.tokenizer_type}")
+        f"  uv run infer.py --checkpoint {final_model_path} --prompt 'Your prompt here'")
+    print("\nNote: Tokenizer type is automatically detected from the checkpoint.")
 
 
 if __name__ == "__main__":

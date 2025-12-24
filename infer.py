@@ -54,8 +54,8 @@ def load_model_from_checkpoint(checkpoint_path: str, device: torch.device):
     model = model.to(device)
     model.eval()
 
-    print(
-        f"Model loaded: {model_type}, {sum(p.numel() for p in model.parameters())/1e6:.2f}M parameters")
+    param_count = sum(p.numel() for p in model.parameters()) / 1e6
+    print(f"Model loaded: {model_type}, {param_count:.2f}M parameters")
     return model, cfg, checkpoint
 
 
@@ -102,9 +102,9 @@ def main():
     parser.add_argument(
         "--tokenizer_type",
         type=str,
-        default="character",
+        default=None,
         choices=["character", "bpe"],
-        help="Tokenizer type (must match training)"
+        help="Tokenizer type (auto-detected from checkpoint if not provided)"
     )
     parser.add_argument(
         "--text_file",
@@ -124,20 +124,41 @@ def main():
     print(f"Using device: {device}")
 
     # Load model
-    model, _, _ = load_model_from_checkpoint(args.checkpoint, device)
+    model, _, checkpoint = load_model_from_checkpoint(args.checkpoint, device)
+
+    # Get tokenizer type from checkpoint or args
+    tokenizer_type = checkpoint.get("tokenizer_type")
+    if tokenizer_type is None:
+        # Fallback to command-line argument
+        if args.tokenizer_type is None:
+            raise ValueError(
+                "Tokenizer type not found in checkpoint and not provided. "
+                "Please specify --tokenizer_type (character or bpe)"
+            )
+        tokenizer_type = args.tokenizer_type
+        print(
+            f"Warning: Tokenizer type not in checkpoint, using provided: {tokenizer_type}")
+    else:
+        # Check if user provided a different tokenizer type
+        if args.tokenizer_type is not None and args.tokenizer_type != tokenizer_type:
+            print(
+                f"Warning: Checkpoint uses tokenizer type '{tokenizer_type}', "
+                f"but you provided '{args.tokenizer_type}'. "
+                f"Using '{tokenizer_type}' from checkpoint."
+            )
 
     # Create tokenizer (must match training tokenizer)
-    if args.tokenizer_type == "character":
+    if tokenizer_type == "character":
         with open(args.text_file, "r", encoding="utf-8") as f:
             text = f.read()
         tokenizer = CharacterTokenizer(text)
-    elif args.tokenizer_type == "bpe":
+    elif tokenizer_type == "bpe":
         tokenizer = BPETokenizer()
     else:
-        raise ValueError(f"Unknown tokenizer type: {args.tokenizer_type}")
+        raise ValueError(f"Unknown tokenizer type: {tokenizer_type}")
 
     print(
-        f"Using {args.tokenizer_type} tokenizer (vocab size: {tokenizer.vocab_size})")
+        f"Using {tokenizer_type} tokenizer (vocab size: {tokenizer.vocab_size})")
 
     # Create sampler
     sampler = TransformerSampler(

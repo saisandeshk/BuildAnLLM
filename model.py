@@ -3,7 +3,7 @@ import torch.nn as nn
 from jaxtyping import Float, Int
 from torch import Tensor
 from config import Architecture
-from embed import EmbedWithoutTorch, EmbedWithTorch
+from embed import EmbedWithoutTorch, EmbedWithTorch, UnembedWithoutTorch, UnembedWithTorch
 from positional_embedding import PosEmbedWithEinops, PosEmbedWithoutEinops
 from transformer_block import create_transformer_block
 from layernorm import create_norm_layer
@@ -50,8 +50,7 @@ class TransformerModelWithEinops(nn.Module):
         self.ln_f = create_norm_layer(cfg, use_einops=True)
 
         # Unembedding
-        self.unembed = nn.Parameter(torch.empty((cfg.d_model, cfg.d_vocab)))
-        nn.init.normal_(self.unembed, std=self.cfg.init_range)
+        self.unembed = UnembedWithoutTorch(cfg)
 
     def forward(
         self, tokens: Int[Tensor, "batch position"]
@@ -79,9 +78,8 @@ class TransformerModelWithEinops(nn.Module):
 
         # Unembedding to logits
         # residual: [batch, position, d_model]
-        # unembed: [d_model, d_vocab]
         # logits: [batch, position, d_vocab]
-        logits = torch.matmul(residual, self.unembed)
+        logits = self.unembed(residual)
 
         return logits
 
@@ -126,8 +124,7 @@ class TransformerModelWithoutEinops(nn.Module):
         self.ln_f = create_norm_layer(cfg, use_einops=False)
 
         # Unembedding
-        self.unembed = nn.Parameter(torch.empty((cfg.d_model, cfg.d_vocab)))
-        nn.init.normal_(self.unembed, std=self.cfg.init_range)
+        self.unembed = UnembedWithTorch(cfg)
 
     def forward(
         self, tokens: Int[Tensor, "batch position"]
@@ -155,9 +152,8 @@ class TransformerModelWithoutEinops(nn.Module):
 
         # Unembedding to logits
         # residual: [batch, position, d_model]
-        # unembed: [d_model, d_vocab]
         # logits: [batch, position, d_vocab]
-        logits = torch.matmul(residual, self.unembed)
+        logits = self.unembed(residual)
 
         return logits
 

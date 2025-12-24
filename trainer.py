@@ -19,6 +19,7 @@ class TransformerTrainer:
         device: torch.device,
         eval_interval: int = 500,
         print_interval: int = 100,
+        tokenizer_type: str = None,
     ):
         self.model = model
         self.args = args
@@ -30,6 +31,7 @@ class TransformerTrainer:
         self.eval_interval = eval_interval
         self.eval_iters = getattr(args, "eval_iters", 200)
         self.print_interval = print_interval
+        self.tokenizer_type = tokenizer_type
 
         # Setup optimizer
         self.optimizer = torch.optim.AdamW(
@@ -207,6 +209,7 @@ class TransformerTrainer:
                 "args": self.args,
                 "cfg": cfg,
                 "model_type": model_type,
+                "tokenizer_type": self.tokenizer_type,
             },
             filepath,
         )
