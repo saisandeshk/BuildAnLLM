@@ -11,6 +11,8 @@ from jaxtyping import Float, Tensor
 from layernorm import LayerNormWithEinops, LayerNormWithoutEinops, LayerNormWithTorch
 from embed import EmbedWithoutTorch, EmbedWithTorch
 from positional_embedding import PosEmbedWithEinops, PosEmbedWithoutEinops
+from attention import AttentionWithEinops, AttentionWithoutEinops
+from mlp import MLPWithEinops, MLPWithoutEinops
 
 device = torch.device(
     "mps" if t.backends.mps.is_available() else "cuda" if t.cuda.is_available() else "cpu"
