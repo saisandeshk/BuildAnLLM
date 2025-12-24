@@ -38,7 +38,6 @@ cfg = GPTConfig()
 
 TOKENIZER_TYPE = "bpe"
 
-# Create tokenizer based on type
 if TOKENIZER_TYPE == "character":
     tokenizer = CharacterTokenizer(text)
 elif TOKENIZER_TYPE == "character_torch":
