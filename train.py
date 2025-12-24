@@ -1,5 +1,5 @@
 # /// script
-# dependencies = ["torch", "einops", "jaxtyping", "numpy", "tiktoken", "sentencepiece", "tqdm"]
+# dependencies = ["torch", "einops", "jaxtyping", "numpy", "tiktoken", "sentencepiece", "tqdm", "matplotlib"]
 # ///
 
 """Training script for transformer models."""

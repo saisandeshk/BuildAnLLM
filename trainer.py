@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import os
 from tqdm import tqdm
+import matplotlib.pyplot as plt
 from training_args import TransformerTrainingArgs
 
 
@@ -41,6 +42,11 @@ class TransformerTrainer:
         # Track running average of loss
         self.running_loss = 0.0
         self.loss_alpha = 0.99  # Exponential moving average
+
+        # Track losses for plotting
+        self.train_losses = []
+        self.val_losses = []
+        self.iterations = []
 
         # Create save directory if it doesn't exist
         if hasattr(args, "save_dir"):
@@ -144,6 +150,10 @@ class TransformerTrainer:
                     f"\n[Iter {iter_num}] Train loss: {losses['train']:.4f}, "
                     f"Val loss: {losses['val']:.4f}"
                 )
+                # Track losses for plotting
+                self.iterations.append(iter_num)
+                self.train_losses.append(losses['train'])
+                self.val_losses.append(losses['val'])
                 # Update progress bar with eval metrics
                 pbar.set_postfix(
                     {
@@ -168,6 +178,8 @@ class TransformerTrainer:
         # Save final checkpoint
         if hasattr(self.args, "save_dir"):
             self.save_checkpoint(self.max_iters, is_final=True)
+            # Save loss graph
+            self.save_loss_graph()
 
     def save_checkpoint(self, iter_num: int, is_final: bool = False):
         """Save model checkpoint"""
@@ -200,6 +212,28 @@ class TransformerTrainer:
         )
         if not is_final:
             print(f"Checkpoint saved: {filepath}")
+
+    def save_loss_graph(self):
+        """Save loss graph to checkpoint directory"""
+        if not hasattr(self.args, "save_dir") or not self.iterations:
+            return
+
+        plt.figure(figsize=(10, 6))
+        plt.plot(self.iterations, self.train_losses,
+                 label="Train Loss", marker="o", markersize=3)
+        plt.plot(self.iterations, self.val_losses,
+                 label="Val Loss", marker="s", markersize=3)
+        plt.xlabel("Iteration")
+        plt.ylabel("Loss")
+        plt.title("Training and Validation Loss")
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        plt.tight_layout()
+
+        graph_path = os.path.join(self.args.save_dir, "loss_graph.png")
+        plt.savefig(graph_path, dpi=150)
+        plt.close()
+        print(f"Loss graph saved to: {graph_path}")
 
     @staticmethod
     def load_checkpoint(
