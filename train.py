@@ -8,7 +8,6 @@ from training_args import TransformerTrainingArgs
 from trainer import TransformerTrainer
 from dataset import TransformerDataset
 from gpt import GPTWithEinops, GPTWithoutEinops
-from sampler import TransformerSampler
 
 device = torch.device(
     "mps" if torch.backends.mps.is_available(
@@ -78,66 +77,10 @@ trainer = TransformerTrainer(
 # Start training
 trainer.train()
 
-# After training, create sampler for text generation
 print("\n" + "=" * 50)
-print("Training complete! Creating sampler for text generation...")
-sampler = TransformerSampler(
-    model=model, tokenizer=dataset.tokenizer, device=device)
-
-# Sample with different strategies
-print("\n" + "=" * 50)
-print("Generating text samples with different strategies...")
+print("Training complete!")
 print("=" * 50)
-
-prompt = "First Citizen:"
-
-# 1. Low temperature (deterministic, focused)
-print("\n1. Low temperature (0.5, focused):")
-generated = sampler.sample(
-    prompt, max_new_tokens=200, temperature=0.5, top_k=None, top_p=None
-)
-print(f"Prompt: {prompt}")
-print(f"Generated:\n{generated}\n")
-
-# 2. Medium temperature
-print("2. Medium temperature (1.0, balanced):")
-generated = sampler.sample(
-    prompt, max_new_tokens=200, temperature=1.0, top_k=None, top_p=None
-)
-print(f"Prompt: {prompt}")
-print(f"Generated:\n{generated}\n")
-
-# 3. High temperature (more creative)
-print("3. High temperature (1.5, creative):")
-generated = sampler.sample(
-    prompt, max_new_tokens=200, temperature=1.5, top_k=None, top_p=None
-)
-print(f"Prompt: {prompt}")
-print(f"Generated:\n{generated}\n")
-
-# 4. Top-k sampling
-print("4. Top-k sampling (k=40, temperature=0.8):")
-generated = sampler.sample(
-    prompt, max_new_tokens=200, temperature=0.8, top_k=40, top_p=None
-)
-print(f"Prompt: {prompt}")
-print(f"Generated:\n{generated}\n")
-
-# 5. Top-p (nucleus) sampling
-print("5. Top-p (nucleus) sampling (p=0.9, temperature=0.8):")
-generated = sampler.sample(
-    prompt, max_new_tokens=200, temperature=0.8, top_k=None, top_p=0.9
-)
-print(f"Prompt: {prompt}")
-print(f"Generated:\n{generated}\n")
-
-# 6. Combined top-k and top-p
-print("6. Combined top-k and top-p (k=40, p=0.9, temperature=0.8):")
-generated = sampler.sample(
-    prompt, max_new_tokens=200, temperature=0.8, top_k=40, top_p=0.9
-)
-print(f"Prompt: {prompt}")
-print(f"Generated:\n{generated}\n")
-
-print("=" * 50)
-print("Sampling complete!")
+print(f"Model saved to: {args.save_dir}/final_model.pt")
+print("\nTo generate text, run:")
+print(
+    f"  uv run infer.py --checkpoint {args.save_dir}/final_model.pt --prompt 'Your prompt here'")

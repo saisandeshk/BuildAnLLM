@@ -1,0 +1,889 @@
+# GPT from Scratch: A Complete Implementation Guide
+
+This repository contains a complete, educational implementation of a GPT (Generative Pre-trained Transformer) model from scratch in PyTorch. It's designed for learning, with detailed explanations, shape annotations, and both "einops" and "without einops" versions of each component.
+
+## Table of Contents
+
+1. [Project Overview](#project-overview)
+2. [Project Structure](#project-structure)
+3. [Understanding Einops](#understanding-einops)
+4. [Core Components Deep Dive](#core-components-deep-dive)
+5. [Training Pipeline](#training-pipeline)
+6. [Inference and Sampling](#inference-and-sampling)
+7. [Usage Guide](#usage-guide)
+8. [Key Concepts Explained](#key-concepts-explained)
+
+---
+
+## Project Overview
+
+This is a **pre-training** implementation - we train a GPT model from scratch on text data using next-token prediction (autoregressive language modeling). The model learns general language patterns, grammar, and style from the training corpus.
+
+**What this is:**
+- ✅ Pre-training (unsupervised learning on raw text)
+- ✅ Next-token prediction (autoregressive language modeling)
+- ✅ Complete GPT architecture implementation
+- ✅ Educational codebase with detailed comments
+
+**What this is NOT:**
+- ❌ Fine-tuning (task-specific adaptation)
+- ❌ Instruction tuning (supervised fine-tuning)
+- ❌ RLHF (Reinforcement Learning from Human Feedback)
+- ❌ Post-training alignment techniques
+
+---
+
+## Project Structure
+
+```
+.
+├── config.py              # Model architecture configuration (GPTConfig)
+├── training_args.py        # Training hyperparameters (TransformerTrainingArgs)
+├── layernorm.py           # Layer normalization (3 versions)
+├── embed.py               # Token embeddings (2 versions)
+├── positional_embedding.py # Positional embeddings (2 versions)
+├── attention.py           # Multi-head self-attention (2 versions)
+├── mlp.py                 # Feedforward network (2 versions)
+├── transformer_block.py    # Transformer block (2 versions)
+├── gpt.py                 # Full GPT model (2 versions)
+├── tokenizer.py           # Tokenization (multiple types)
+├── dataset.py             # Dataset creation and splitting
+├── trainer.py             # Training loop and evaluation
+├── sampler.py             # Text generation and sampling
+├── train.py               # Main training script
+├── infer.py               # Inference script (loads from checkpoint)
+└── training.txt           # Training data
+```
+
+---
+
+## Understanding Einops
+
+**Einops** is a library that makes tensor operations more readable and less error-prone. It uses a simple notation to describe tensor shapes and operations.
+
+### Why Einops?
+
+**Without Einops:**
+```python
+# Hard to read - what dimensions are being operated on?
+q = torch.einsum("bpd,nhd->bpnh", residual, self.W_Q)
+q = q.transpose(1, 2)  # Which dimensions? Hard to track
+```
+
+**With Einops:**
+```python
+# Clear and readable - dimensions are named
+q = einops.einsum(
+    residual, self.W_Q,
+    "batch posn d_model, n_heads d_head d_model -> batch posn n_heads d_head"
+)
+```
+
+### Einops Operations
+
+#### 1. `einops.rearrange` - Reshape and reorder dimensions
+```python
+# Reshape [batch, seq, d_model] to [batch, d_model, seq]
+x = einops.rearrange(x, "batch seq d_model -> batch d_model seq")
+
+# Split a dimension
+# [batch, seq, d_model] -> [batch, seq, n_heads, d_head]
+x = einops.rearrange(x, "batch seq (n_heads d_head) -> batch seq n_heads d_head", n_heads=4)
+```
+
+#### 2. `einops.reduce` - Reduce dimensions (mean, sum, max, etc.)
+```python
+# Compute mean over d_model dimension
+# [batch, posn, d_model] -> [batch, posn, 1]
+mean = einops.reduce(x, "batch posn d_model -> batch posn 1", "mean")
+```
+
+#### 3. `einops.repeat` - Repeat tensors
+```python
+# Repeat along batch dimension
+# [seq, d_model] -> [batch, seq, d_model]
+pos_emb = einops.repeat(W_pos, "seq d_model -> batch seq d_model", batch=32)
+```
+
+#### 4. `einops.einsum` - Einstein summation (generalized matrix multiplication)
+```python
+# Matrix multiplication with named dimensions
+# [batch, seq, d_model] @ [d_model, d_mlp] -> [batch, seq, d_mlp]
+output = einops.einsum(
+    x, weight,
+    "batch seq d_model, d_model d_mlp -> batch seq d_mlp"
+)
+```
+
+### Einops Benefits
+
+1. **Readability**: Dimension names make code self-documenting
+2. **Safety**: Harder to make dimension mistakes
+3. **Flexibility**: Easy to rearrange, reduce, or repeat dimensions
+4. **Debugging**: Clear error messages when shapes don't match
+
+---
+
+## Core Components Deep Dive
+
+### 1. Layer Normalization (`layernorm.py`)
+
+**Purpose**: Normalize activations across the feature dimension to stabilize training.
+
+**Three Implementations:**
+
+#### `LayerNormWithEinops`
+Uses `einops.reduce` for mean and variance computation:
+```python
+# Compute mean: [batch, posn, d_model] -> [batch, posn, 1]
+residual_mean = einops.reduce(
+    residual, 'batch posn d_model -> batch posn 1', 'mean'
+)
+```
+
+**Why this works**: Einops makes it explicit that we're reducing over `d_model` while keeping `batch` and `posn`.
+
+#### `LayerNormWithoutEinops`
+Uses PyTorch's built-in operations:
+```python
+# Compute mean: [batch, posn, d_model] -> [batch, posn, 1]
+residual_mean = residual.mean(dim=-1, keepdim=True)
+```
+
+**Why this works**: `dim=-1` means "last dimension" (d_model), `keepdim=True` preserves the dimension.
+
+#### `LayerNormWithTorch`
+Uses PyTorch's `nn.LayerNorm`:
+```python
+self.ln = nn.LayerNorm(cfg.d_model, eps=cfg.layer_norm_eps)
+```
+
+**Why this works**: PyTorch's implementation is optimized and handles edge cases.
+
+**Mathematical Formula:**
+```
+LayerNorm(x) = γ * (x - μ) / (σ + ε) + β
+```
+Where:
+- `μ` = mean over d_model dimension
+- `σ` = standard deviation over d_model dimension
+- `γ` (w) = learnable scale parameter
+- `β` (b) = learnable shift parameter
+- `ε` = small constant for numerical stability
+
+**Shape Flow:**
+```
+Input:  [batch, posn, d_model]
+Mean:   [batch, posn, 1]        # Mean over d_model
+Std:    [batch, posn, 1]        # Std over d_model
+Normalized: [batch, posn, d_model]
+Output: [batch, posn, d_model]  # After scale and shift
+```
+
+---
+
+### 2. Token Embeddings (`embed.py`)
+
+**Purpose**: Convert token IDs (integers) into dense vector representations.
+
+#### `EmbedWithoutTorch`
+Manual implementation using `nn.Parameter`:
+```python
+# W_E: [d_vocab, d_model] - embedding matrix
+self.W_E = nn.Parameter(torch.empty((cfg.d_vocab, cfg.d_model)))
+
+# Forward: Index into embedding matrix
+# tokens: [batch, position] -> [batch, position, d_model]
+return self.W_E[tokens]
+```
+
+**How it works**: 
+- Each token ID (0 to d_vocab-1) maps to a row in `W_E`
+- `W_E[tokens]` uses advanced indexing to look up embeddings
+- Example: `tokens = [[5, 10, 3]]` → `[W_E[5], W_E[10], W_E[3]]`
+
+#### `EmbedWithTorch`
+Uses PyTorch's `nn.Embedding`:
+```python
+self.embedding = nn.Embedding(cfg.d_vocab, cfg.d_model)
+return self.embedding(tokens)
+```
+
+**Why both versions**: 
+- Manual version shows what's happening under the hood
+- PyTorch version is optimized and handles edge cases
+
+**Shape Flow:**
+```
+Token IDs: [batch, position]  # e.g., [[5, 10, 3]]
+Embedding Matrix: [d_vocab, d_model]  # e.g., [50257, 256]
+Output: [batch, position, d_model]  # e.g., [[emb[5], emb[10], emb[3]]]
+```
+
+---
+
+### 3. Positional Embeddings (`positional_embedding.py`)
+
+**Purpose**: Add information about token positions in the sequence.
+
+#### `PosEmbedWithEinops`
+```python
+# W_pos: [n_ctx, d_model] - one embedding per position
+# Get embeddings for current sequence length
+W_pos[:seq_len]  # [seq_len, d_model]
+
+# Repeat for each item in batch
+einops.repeat(
+    W_pos[:seq_len], 
+    "seq d_model -> batch seq d_model", 
+    batch=batch
+)
+```
+
+**How it works**:
+- `W_pos[i]` is the embedding for position `i`
+- `einops.repeat` broadcasts `[seq_len, d_model]` to `[batch, seq_len, d_model]`
+
+#### `PosEmbedWithoutEinops`
+```python
+# Manual broadcasting
+position_embeddings_we_need = self.W_pos[:sequence_length]  # [seq_len, d_model]
+position_embeddings_with_batch_dim = position_embeddings_we_need.unsqueeze(0)  # [1, seq_len, d_model]
+position_embeddings_repeated = position_embeddings_with_batch_dim.expand(batch_size, -1, -1)  # [batch, seq_len, d_model]
+```
+
+**How it works**:
+- `unsqueeze(0)` adds a batch dimension at position 0
+- `expand()` repeats along batch dimension (memory-efficient, no copying)
+
+**Shape Flow:**
+```
+W_pos: [n_ctx, d_model]  # e.g., [1024, 256]
+Slice: [seq_len, d_model]  # e.g., [128, 256]
+Repeat: [batch, seq_len, d_model]  # e.g., [32, 128, 256]
+```
+
+**Why positional embeddings?**
+- Transformers have no inherent notion of sequence order
+- Positional embeddings encode "this token is at position 5"
+- Added to token embeddings: `final_emb = token_emb + pos_emb`
+
+---
+
+### 4. Multi-Head Self-Attention (`attention.py`)
+
+**Purpose**: Allow tokens to attend to other tokens in the sequence, learning relationships.
+
+#### Key Concepts
+
+**Query (Q), Key (K), Value (V)**:
+- **Query**: "What am I looking for?"
+- **Key**: "What do I represent?"
+- **Value**: "What information do I contain?"
+
+**Attention Mechanism**:
+1. Compute attention scores: `Q @ K^T` (how much each token attends to others)
+2. Apply causal mask (prevent looking at future tokens)
+3. Softmax to get attention probabilities
+4. Weighted sum of values: `Attention(Q, K, V) = softmax(QK^T / √d_head) @ V`
+
+#### `AttentionWithEinops`
+
+**Step 1: Compute Q, K, V**
+```python
+# residual: [batch, posn, d_model]
+# W_Q: [n_heads, d_head, d_model]
+# q: [batch, posn, n_heads, d_head]
+q = einops.einsum(
+    residual, self.W_Q,
+    "batch posn d_model, n_heads d_head d_model -> batch posn n_heads d_head"
+)
+```
+
+**What's happening**: For each head, we project the residual into a `d_head`-dimensional space.
+
+**Step 2: Compute Attention Scores**
+```python
+# q: [batch, posn_q, n_heads, d_head]
+# k: [batch, posn_k, n_heads, d_head]
+# attn_scores: [batch, n_heads, posn_q, posn_k]
+attn_scores = einops.einsum(
+    q, k,
+    "batch posn_q n_heads d_head, batch posn_k n_heads d_head -> batch n_heads posn_q posn_k"
+) / (self.cfg.d_head ** 0.5)  # Scale by √d_head
+```
+
+**What's happening**: 
+- For each position `i` and head `h`, compute dot product with all positions `j`
+- `attn_scores[b, h, i, j]` = how much position `i` attends to position `j` in head `h`
+- Scaling by `√d_head` prevents softmax from saturating
+
+**Step 3: Causal Masking**
+```python
+# mask: [seq_len, seq_len] - lower triangular matrix
+mask = torch.tril(torch.ones((seq_len, seq_len), device=residual.device))
+# Set future positions to -inf (so softmax makes them 0)
+attn_scores = attn_scores.masked_fill(mask == 0, float("-inf"))
+```
+
+**What's happening**:
+- Lower triangular matrix: `mask[i, j] = 1` if `j <= i`, else `0`
+- Prevents token at position `i` from seeing tokens at positions `> i`
+- Essential for autoregressive generation
+
+**Step 4: Softmax and Apply to Values**
+```python
+# attn_pattern: [batch, n_heads, posn_q, posn_k] - probabilities
+attn_pattern = torch.softmax(attn_scores, dim=-1)
+
+# Weighted sum of values
+# attn_output: [batch, posn_q, n_heads, d_head]
+attn_output = einops.einsum(
+    attn_pattern, v,
+    "batch n_heads posn_q posn_k, batch posn_k n_heads d_head -> batch posn_q n_heads d_head"
+)
+```
+
+**What's happening**:
+- `attn_pattern[b, h, i, j]` = probability that position `i` attends to position `j`
+- Weighted sum: `output[i] = Σ_j attn_pattern[i, j] * v[j]`
+
+**Step 5: Project Back**
+```python
+# attn_output: [batch, posn, n_heads, d_head]
+# W_O: [n_heads, d_head, d_model]
+# output: [batch, posn, d_model]
+output = einops.einsum(
+    attn_output, self.W_O,
+    "batch posn n_heads d_head, n_heads d_head d_model -> batch posn d_model"
+)
+```
+
+**What's happening**: Combine all heads and project back to `d_model` dimensions.
+
+#### `AttentionWithoutEinops`
+
+Same logic, but using PyTorch operations:
+```python
+# Compute Q, K, V using einsum
+q = torch.einsum("bpd,nhd->bpnh", residual, self.W_Q)
+
+# Transpose for matmul: [batch, seq, n_heads, d_head] -> [batch, n_heads, seq, d_head]
+q = q.transpose(1, 2)
+
+# Attention scores
+attn_scores = torch.matmul(q, k.transpose(-2, -1)) / (self.cfg.d_head ** 0.5)
+```
+
+**Shape Flow (Full Attention)**:
+```
+Input: [batch, seq, d_model]
+Q/K/V: [batch, seq, n_heads, d_head]  (per head)
+Scores: [batch, n_heads, seq, seq]  (attention weights)
+Pattern: [batch, n_heads, seq, seq]  (after softmax)
+Output: [batch, seq, n_heads, d_head]  (weighted values)
+Final: [batch, seq, d_model]  (after projection)
+```
+
+**Why Multi-Head?**
+- Different heads can learn different relationships
+- Head 1 might learn subject-verb relationships
+- Head 2 might learn long-range dependencies
+- Head 3 might learn local patterns
+- Combining them gives richer representations
+
+---
+
+### 5. MLP / Feedforward Network (`mlp.py`)
+
+**Purpose**: Apply pointwise non-linear transformations to each position independently.
+
+#### Architecture
+
+```
+Input → Linear(d_model → d_mlp) → GELU → Linear(d_mlp → d_model) → Output
+```
+
+#### `MLPWithEinops`
+
+```python
+# First linear layer
+# residual: [batch, posn, d_model]
+# W_in: [d_model, d_mlp]
+# hidden: [batch, posn, d_mlp]
+hidden = einops.einsum(
+    residual, self.W_in,
+    "batch posn d_model, d_model d_mlp -> batch posn d_mlp"
+) + self.b_in
+
+# GELU activation (element-wise)
+hidden = torch.nn.functional.gelu(hidden)
+
+# Second linear layer
+# hidden: [batch, posn, d_mlp]
+# W_out: [d_mlp, d_model]
+# output: [batch, posn, d_model]
+output = einops.einsum(
+    hidden, self.W_out,
+    "batch posn d_mlp, d_mlp d_model -> batch posn d_model"
+) + self.b_out
+```
+
+**What's happening**:
+- Each position is processed independently (no interaction between positions)
+- Expands to `d_mlp` (typically 4x `d_model`) for more capacity
+- GELU provides non-linearity
+- Projects back to `d_model`
+
+**Why GELU?**
+- GELU (Gaussian Error Linear Unit) is smoother than ReLU
+- Used in GPT, BERT, and modern transformers
+- Formula: `GELU(x) = x * Φ(x)` where Φ is CDF of standard normal
+
+**Shape Flow:**
+```
+Input: [batch, posn, d_model]  # e.g., [32, 128, 256]
+Expand: [batch, posn, d_mlp]  # e.g., [32, 128, 1024]
+Activate: [batch, posn, d_mlp]  # GELU (element-wise)
+Project: [batch, posn, d_model]  # e.g., [32, 128, 256]
+```
+
+---
+
+### 6. Transformer Block (`transformer_block.py`)
+
+**Purpose**: Combine attention and MLP with residual connections and layer normalization.
+
+#### Architecture (Pre-Norm)
+
+```
+Input
+  ↓
+LayerNorm → Attention → + (residual)
+  ↓                      ↑
+  └──────────────────────┘
+  ↓
+LayerNorm → MLP → + (residual)
+  ↓                ↑
+  └────────────────┘
+  ↓
+Output
+```
+
+#### Implementation
+
+```python
+def forward(self, residual):
+    # Pre-norm attention with residual connection
+    residual = residual + self.attn(self.ln1(residual))
+    
+    # Pre-norm MLP with residual connection
+    residual = residual + self.mlp(self.ln2(residual))
+    
+    return residual
+```
+
+**Key Concepts**:
+
+1. **Pre-Norm vs Post-Norm**:
+   - **Pre-Norm** (what we use): `x + f(LN(x))`
+   - **Post-Norm**: `LN(x + f(x))`
+   - Pre-norm is more stable for deep networks
+
+2. **Residual Connections**:
+   - Allow gradients to flow directly through
+   - Enable training of very deep networks
+   - Help model learn identity function if needed
+
+3. **Why Two LayerNorms?**
+   - One before attention (stabilizes attention)
+   - One before MLP (stabilizes MLP)
+   - Each sub-block gets normalized inputs
+
+**Shape Flow:**
+```
+Input: [batch, posn, d_model]
+  ↓
+LN1: [batch, posn, d_model]
+  ↓
+Attention: [batch, posn, d_model]
+  ↓
+Add: [batch, posn, d_model]  (residual connection)
+  ↓
+LN2: [batch, posn, d_model]
+  ↓
+MLP: [batch, posn, d_model]
+  ↓
+Add: [batch, posn, d_model]  (residual connection)
+  ↓
+Output: [batch, posn, d_model]
+```
+
+---
+
+### 7. Full GPT Model (`gpt.py`)
+
+**Purpose**: Stack all components into a complete language model.
+
+#### Architecture Flow
+
+```
+Tokens [batch, position]
+  ↓
+Token Embeddings → [batch, position, d_model]
+  ↓
++ Positional Embeddings → [batch, position, d_model]
+  ↓
+Transformer Block 1 → [batch, position, d_model]
+  ↓
+Transformer Block 2 → [batch, position, d_model]
+  ↓
+...
+  ↓
+Transformer Block N → [batch, position, d_model]
+  ↓
+Final LayerNorm → [batch, position, d_model]
+  ↓
+Unembedding → [batch, position, d_vocab] (logits)
+```
+
+#### Implementation
+
+```python
+def forward(self, tokens):
+    # tokens: [batch, position]
+    
+    # Token embeddings
+    residual = self.embed(tokens)  # [batch, position, d_model]
+    
+    # Add positional embeddings
+    residual = residual + self.pos_embed(tokens)  # [batch, position, d_model]
+    
+    # Pass through transformer blocks
+    for block in self.blocks:
+        residual = block(residual)  # [batch, position, d_model]
+    
+    # Final layer norm
+    residual = self.ln_f(residual)  # [batch, position, d_model]
+    
+    # Unembedding to logits
+    # residual: [batch, position, d_model]
+    # unembed: [d_model, d_vocab]
+    # logits: [batch, position, d_vocab]
+    logits = torch.matmul(residual, self.unembed)
+    
+    return logits
+```
+
+**Key Components**:
+
+1. **Embedding**: `[batch, position] → [batch, position, d_model]`
+2. **Positional Embedding**: `[batch, position] → [batch, position, d_model]`
+3. **Transformer Blocks**: `[batch, position, d_model] → [batch, position, d_model]` (N times)
+4. **Final LayerNorm**: Stabilizes before unembedding
+5. **Unembedding**: `[batch, position, d_model] → [batch, position, d_vocab]`
+
+**Unembedding Explained**:
+- `unembed` is a learned matrix `[d_model, d_vocab]`
+- Each row represents a vocabulary token
+- `logits[i, j]` = score for token `j` at position `i`
+- After softmax: probabilities over vocabulary
+
+---
+
+## Training Pipeline
+
+### 1. Data Loading (`dataset.py`)
+
+**Purpose**: Load text, tokenize, and create training sequences.
+
+#### Process
+
+1. **Load Text**: Read raw text file
+2. **Tokenize**: Convert text to token IDs
+3. **Create Sequences**: Sliding window approach
+   - Input: `[token_0, token_1, ..., token_n-1]`
+   - Target: `[token_1, token_2, ..., token_n]` (shifted by 1)
+4. **Split**: Train/validation split (default 90/10)
+
+#### Code Flow
+
+```python
+# Load text
+text = "Hello world..."
+
+# Tokenize
+data = tokenizer.encode_tensor(text)  # [total_tokens]
+
+# Create sequences (sliding window)
+for i in range(len(data) - block_size):
+    X.append(data[i:i+block_size])      # Input
+    Y.append(data[i+1:i+block_size+1])  # Target (shifted)
+
+# X: [num_sequences, block_size]
+# Y: [num_sequences, block_size]
+```
+
+**Why Shift by 1?**
+- We predict the next token
+- At position `i`, we predict token at position `i+1`
+- This is autoregressive language modeling
+
+### 2. Training Loop (`trainer.py`)
+
+**Purpose**: Train the model using gradient descent.
+
+#### Key Components
+
+1. **Optimizer**: AdamW (adaptive learning rate with weight decay)
+2. **Loss Function**: Cross-entropy (next-token prediction)
+3. **Evaluation**: Periodic evaluation on train/val sets
+4. **Checkpointing**: Save model periodically
+
+#### Training Step
+
+```python
+# 1. Get random batch
+idx = torch.randint(0, len(X_train), (batch_size,))
+x_batch = X_train[idx]  # [batch_size, seq_len]
+y_batch = Y_train[idx]  # [batch_size, seq_len]
+
+# 2. Forward pass
+logits = model(x_batch)  # [batch_size, seq_len, vocab_size]
+
+# 3. Compute loss
+# Reshape for cross-entropy
+logits_flat = logits.view(-1, vocab_size)  # [batch*seq, vocab]
+targets_flat = y_batch.view(-1)  # [batch*seq]
+loss = F.cross_entropy(logits_flat, targets_flat)
+
+# 4. Backward pass
+optimizer.zero_grad()
+loss.backward()
+optimizer.step()
+```
+
+**Loss Explanation**:
+- Cross-entropy measures how well predicted probabilities match true token
+- Lower loss = better predictions
+- Typical range: starts high (2-4), decreases during training
+
+**Evaluation**:
+- Run model in `eval()` mode (no dropout, no gradient computation)
+- Average loss over multiple random batches
+- Compare train vs val loss to detect overfitting
+
+### 3. Configuration (`config.py`, `training_args.py`)
+
+#### `GPTConfig` - Model Architecture
+- `d_model`: Hidden dimension (e.g., 256, 768)
+- `n_layers`: Number of transformer blocks (e.g., 4, 12)
+- `n_heads`: Number of attention heads (e.g., 4, 12)
+- `d_head`: Dimension per head (typically `d_model / n_heads`)
+- `d_mlp`: MLP hidden dimension (typically `4 * d_model`)
+- `n_ctx`: Context length (max sequence length)
+- `d_vocab`: Vocabulary size
+
+#### `TransformerTrainingArgs` - Training Hyperparameters
+- `batch_size`: Number of sequences per batch
+- `epochs`: Number of training epochs
+- `lr`: Learning rate
+- `weight_decay`: L2 regularization strength
+- `eval_iters`: Number of batches for evaluation
+
+---
+
+## Inference and Sampling
+
+### Text Generation (`sampler.py`)
+
+**Purpose**: Generate text from a trained model.
+
+#### Autoregressive Generation
+
+```python
+# Start with prompt
+tokens = tokenizer.encode(prompt)  # [seq_len]
+
+# Generate tokens one by one
+for _ in range(max_new_tokens):
+    # Get model predictions
+    logits = model(tokens)  # [1, seq_len, vocab_size]
+    
+    # Get logits for last position
+    next_token_logits = logits[0, -1, :]  # [vocab_size]
+    
+    # Sample next token
+    next_token = sample(next_token_logits)
+    
+    # Append to sequence
+    tokens.append(next_token)
+```
+
+#### Sampling Strategies
+
+1. **Temperature Sampling**:
+   ```python
+   logits = logits / temperature
+   probs = softmax(logits)
+   ```
+   - `temperature < 1`: More focused (deterministic)
+   - `temperature = 1`: Balanced
+   - `temperature > 1`: More creative (random)
+
+2. **Top-k Sampling**:
+   ```python
+   # Only consider top k most likely tokens
+   top_k_logits = topk(logits, k)
+   ```
+   - Prevents sampling very unlikely tokens
+   - `k=40` is common
+
+3. **Top-p (Nucleus) Sampling**:
+   ```python
+   # Consider tokens until cumulative probability > p
+   sorted_probs = sort(softmax(logits))
+   cumulative = cumsum(sorted_probs)
+   mask = cumulative <= p
+   ```
+   - Adaptive: considers more tokens when distribution is flat
+   - `p=0.9` is common
+
+4. **Combined**: Top-k + Top-p + Temperature
+   - Most common in practice
+   - Provides good balance of quality and diversity
+
+---
+
+## Usage Guide
+
+### Training
+
+```bash
+# Train the model
+uv run train.py
+```
+
+**What happens**:
+1. Loads `training.txt`
+2. Creates tokenizer and dataset
+3. Initializes model
+4. Trains for specified epochs
+5. Saves checkpoints to `checkpoints/`
+
+**Configuration**:
+- Edit `train.py` to change model size, tokenizer, etc.
+- Edit `training_args.py` to change hyperparameters
+
+### Inference
+
+```bash
+# Generate text from trained model
+uv run infer.py --checkpoint checkpoints/final_model.pt --prompt "First Citizen:"
+```
+
+**What happens**:
+1. Loads model from checkpoint
+2. Loads tokenizer
+3. Generates text from prompt
+4. Prints generated text
+
+**Options**:
+- `--checkpoint`: Path to model checkpoint
+- `--prompt`: Starting text prompt
+- `--max_new_tokens`: Number of tokens to generate
+- `--temperature`: Sampling temperature
+- `--top_k`: Top-k sampling (optional)
+- `--top_p`: Top-p sampling (optional)
+
+---
+
+## Key Concepts Explained
+
+### 1. Autoregressive Language Modeling
+
+**What it is**: Predicting the next token given previous tokens.
+
+**Example**:
+```
+Input:  "The cat sat on the"
+Target: "cat sat on the mat"
+```
+
+At each position, we predict what comes next.
+
+**Why it works**: 
+- Language has structure and patterns
+- Given context, next token is somewhat predictable
+- Model learns these patterns from data
+
+### 2. Causal Masking
+
+**What it is**: Preventing the model from seeing future tokens during training.
+
+**Why it's needed**:
+- During inference, we generate one token at a time
+- Model should only use past context
+- Training must match inference conditions
+
+**How it works**:
+- Attention scores for future positions set to `-inf`
+- After softmax, these become 0 probability
+- Model can't attend to future tokens
+
+### 3. Residual Connections
+
+**What it is**: Adding input to output: `output = input + transformation(input)`
+
+**Why it helps**:
+- Allows gradients to flow directly through
+- Enables training very deep networks
+- Model can learn identity if transformation isn't needed
+
+### 4. Layer Normalization
+
+**What it is**: Normalizing activations across the feature dimension.
+
+**Why it helps**:
+- Stabilizes training
+- Allows higher learning rates
+- Reduces internal covariate shift
+
+### 5. Pre-training vs Fine-tuning
+
+**Pre-training** (what we do):
+- Train on large, diverse text corpus
+- Learn general language patterns
+- Unsupervised (no labels needed)
+
+**Fine-tuning**:
+- Take pre-trained model
+- Train further on specific task/domain
+- Supervised (needs labeled data)
+
+---
+
+## Next Steps
+
+1. **Experiment with hyperparameters**: Try different learning rates, model sizes, etc.
+2. **Try different tokenizers**: Compare character-level vs BPE vs SentencePiece
+3. **Add features**: Learning rate scheduling, gradient clipping, etc.
+4. **Scale up**: Train on larger datasets, use more GPUs
+5. **Fine-tuning**: Adapt model to specific tasks
+6. **Mechanistic interpretability**: Understand what the model learned
+
+---
+
+## Resources
+
+- [Attention Is All You Need](https://arxiv.org/abs/1706.03762) - Original transformer paper
+- [Language Models are Unsupervised Multitask Learners](https://d4mucfpksywv.cloudfront.net/better-language-models/language_models_are_unsupervised_multitask_learners.pdf) - GPT-2 paper
+- [Einops Documentation](https://einops.rocks/) - Learn more about einops
+- [The Illustrated Transformer](https://jalammar.github.io/illustrated-transformer/) - Visual explanation
+
+---
+
+## License
+
+This is an educational repository. Feel free to use and modify for learning purposes.
+

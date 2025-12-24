@@ -180,6 +180,12 @@ class TransformerTrainer:
             filepath = os.path.join(
                 self.args.save_dir, f"checkpoint_{iter_num}.pt")
 
+        # Save model config from model
+        cfg = self.model.cfg if hasattr(self.model, "cfg") else None
+
+        # Determine model type from model class name
+        model_type = "with_einops" if "WithEinops" in self.model.__class__.__name__ else "without_einops"
+
         torch.save(
             {
                 "model_state_dict": self.model.state_dict(),
@@ -187,6 +193,8 @@ class TransformerTrainer:
                 "iter_num": iter_num,
                 "running_loss": self.running_loss,
                 "args": self.args,
+                "cfg": cfg,
+                "model_type": model_type,
             },
             filepath,
         )
