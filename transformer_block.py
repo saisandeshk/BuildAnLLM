@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
-from jaxtyping import Float, Tensor
+from jaxtyping import Float
+from torch import Tensor
 from attention import AttentionWithEinops, AttentionWithoutEinops
 from mlp import MLPWithEinops, MLPWithoutEinops
 from layernorm import LayerNormWithEinops, LayerNormWithoutEinops

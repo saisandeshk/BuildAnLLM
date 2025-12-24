@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
 import einops
-from jaxtyping import Float, Tensor
+from jaxtyping import Float
+from torch import Tensor
 
 
 class AttentionWithEinops(nn.Module):

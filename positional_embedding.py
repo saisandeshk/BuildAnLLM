@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
 import einops
-from jaxtyping import Float, Int, Tensor
+from jaxtyping import Float, Int
+from torch import Tensor
 
 
 class PosEmbedWithEinops(nn.Module):

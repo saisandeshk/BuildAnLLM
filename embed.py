@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
-from jaxtyping import Float, Int, Tensor
+from jaxtyping import Float, Int
+from torch import Tensor
 
 
 class EmbedWithoutTorch(nn.Module):

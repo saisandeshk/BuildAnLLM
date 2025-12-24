@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
-from jaxtyping import Float, Int, Tensor
+from jaxtyping import Float, Int
+from torch import Tensor
 from embed import EmbedWithoutTorch, EmbedWithTorch
 from positional_embedding import PosEmbedWithEinops, PosEmbedWithoutEinops
 from transformer_block import TransformerBlockWithEinops, TransformerBlockWithoutEinops
