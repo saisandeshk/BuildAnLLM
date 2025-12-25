@@ -194,8 +194,9 @@ class TransformerTrainer:
             filepath = os.path.join(
                 self.args.save_dir, f"checkpoint_{iter_num}.pt")
 
-        # Save model config from model
+        # Save model config from model as dict for proper serialization
         cfg = self.model.cfg if hasattr(self.model, "cfg") else None
+        cfg_dict = cfg.to_dict() if cfg is not None else None
 
         # Determine model type from model class name
         model_type = "with_einops" if "WithEinops" in self.model.__class__.__name__ else "without_einops"
@@ -207,7 +208,7 @@ class TransformerTrainer:
                 "iter_num": iter_num,
                 "running_loss": self.running_loss,
                 "args": self.args,
-                "cfg": cfg,
+                "cfg": cfg_dict,  # Save as dict for proper enum serialization
                 "model_type": model_type,
                 "tokenizer_type": self.tokenizer_type,
             },

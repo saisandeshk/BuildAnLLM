@@ -538,11 +538,11 @@ if start_training:
         # Load text
         if uploaded_file:
             text = uploaded_file.read().decode("utf-8")
-            st.info(f"Loaded {len(text)} characters from uploaded file")
         else:
             with open("training.txt", "r", encoding="utf-8") as f:
                 text = f.read()
-            st.info(f"Loaded {len(text)} characters from training.txt")
+
+        st.info(f"Loaded {len(text):,} characters.")
 
         # Initialize config from session state
         cfg = ModelConfig(

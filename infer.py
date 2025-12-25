@@ -55,9 +55,21 @@ def load_model_from_checkpoint(checkpoint_path: str, device: torch.device):
         print("Warning: No config in checkpoint, using default")
         cfg = ModelConfig.gpt_small()
     elif isinstance(cfg, dict):
-        # Reconstruct config object from dict
-        cfg = ModelConfig(**cfg)
-    # If it's already a ModelConfig object, use it directly
+        # Use from_dict to properly reconstruct enums
+        cfg = ModelConfig.from_dict(cfg)
+    elif isinstance(cfg, ModelConfig):
+        # Already a ModelConfig object (old format), use it directly
+        pass
+    else:
+        # Fallback: try to convert to dict and reconstruct
+        try:
+            from dataclasses import asdict
+            cfg_dict = asdict(cfg)
+            cfg = ModelConfig.from_dict(cfg_dict)
+        except Exception:
+            # Last resort: use default config
+            print("Warning: Could not reconstruct config, using default")
+            cfg = ModelConfig.gpt_small()
 
     # Determine model type from checkpoint or default
     model_type = checkpoint.get("model_type", "with_einops")

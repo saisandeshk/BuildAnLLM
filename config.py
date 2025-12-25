@@ -203,3 +203,53 @@ class ModelConfig:
             d_mlp=3072,
             d_vocab=50257,
         )
+
+    def to_dict(self):
+        """Convert config to dict with enum values as strings for serialization."""
+        from dataclasses import asdict
+        config_dict = asdict(self)
+        # Convert enum values to strings
+        if isinstance(config_dict.get("architecture"), Enum):
+            config_dict["architecture"] = config_dict["architecture"].value
+        # Handle positional_encoding
+        pos_enc = config_dict.get("positional_encoding")
+        if isinstance(pos_enc, Enum):
+            config_dict["positional_encoding"] = pos_enc.value
+        # Handle normalization
+        norm = config_dict.get("normalization")
+        if isinstance(norm, Enum):
+            config_dict["normalization"] = norm.value
+        # Handle activation
+        act = config_dict.get("activation")
+        if isinstance(act, Enum):
+            config_dict["activation"] = act.value
+        # None values are already None, no need to set them again
+        return config_dict
+
+    @classmethod
+    def from_dict(cls, config_dict):
+        """Reconstruct config from dict with proper enum reconstruction."""
+        # Convert string enum values back to enum instances
+        if "architecture" in config_dict and isinstance(config_dict["architecture"], str):
+            config_dict["architecture"] = Architecture(
+                config_dict["architecture"])
+        if "positional_encoding" in config_dict:
+            pos_enc = config_dict["positional_encoding"]
+            if isinstance(pos_enc, str):
+                config_dict["positional_encoding"] = PositionalEncoding(
+                    pos_enc)
+            elif config_dict["positional_encoding"] is None:
+                pass  # Keep None
+        if "normalization" in config_dict:
+            if isinstance(config_dict["normalization"], str):
+                config_dict["normalization"] = Normalization(
+                    config_dict["normalization"])
+            elif config_dict["normalization"] is None:
+                pass  # Keep None
+        if "activation" in config_dict:
+            if isinstance(config_dict["activation"], str):
+                config_dict["activation"] = Activation(
+                    config_dict["activation"])
+            elif config_dict["activation"] is None:
+                pass  # Keep None
+        return cls(**config_dict)

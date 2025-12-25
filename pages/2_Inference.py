@@ -176,8 +176,26 @@ if load_model or st.session_state.current_model is not None:
 
             # Show model details
             with st.expander("📋 Model Details", expanded=False):
-                st.json({
-                    "Architecture": cfg.architecture.value if hasattr(cfg.architecture, 'value') else str(cfg.architecture),
+                # Helper function to safely get enum value
+                def get_enum_value(enum_obj):
+                    if enum_obj is None:
+                        return "None"
+                    if hasattr(enum_obj, 'value'):
+                        return enum_obj.value
+                    # Handle string values (from deserialized configs)
+                    if isinstance(enum_obj, str):
+                        return enum_obj
+                    return str(enum_obj)
+                
+                # Get positional encoding value for RoPE check
+                pos_enc_value = get_enum_value(cfg.positional_encoding)
+                norm_value = get_enum_value(cfg.normalization)
+                activation_value = get_enum_value(cfg.activation)
+                
+                model_details = {
+                    "Positional Encoding": pos_enc_value,
+                    "Normalization": norm_value,
+                    "Activation": activation_value,
                     "d_model": cfg.d_model,
                     "n_layers": cfg.n_layers,
                     "n_heads": cfg.n_heads,
@@ -186,7 +204,14 @@ if load_model or st.session_state.current_model is not None:
                     "n_ctx": cfg.n_ctx,
                     "d_vocab": cfg.d_vocab,
                     "Parameters": f"{param_count:.2f}M"
-                })
+                }
+                # Add RoPE theta if using RoPE
+                if pos_enc_value == "rope":
+                    model_details["rope_theta"] = cfg.rope_theta
+                # Add tokenizer type from checkpoint
+                if "tokenizer_type" in checkpoint:
+                    model_details["Tokenizer"] = checkpoint["tokenizer_type"]
+                st.json(model_details)
 
     if st.session_state.current_model is not None:
         # Inference controls
