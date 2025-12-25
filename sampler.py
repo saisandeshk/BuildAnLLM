@@ -39,12 +39,24 @@ class TransformerSampler:
         # Encode prompt
         # tokens: [seq_len] - list of token IDs
         tokens = self.tokenizer.encode(prompt)
+
+        # Get context length from model config
+        n_ctx = self.model.cfg.n_ctx if hasattr(self.model, 'cfg') else 1024
+
+        # Truncate prompt if it exceeds context length
+        if len(tokens) > n_ctx:
+            tokens = tokens[-n_ctx:]  # Keep only the last n_ctx tokens
+
         # tokens_tensor: [1, seq_len] - add batch dimension
         tokens_tensor = torch.tensor(
             [tokens], dtype=torch.long, device=self.device)
 
         # Generate tokens
         for _ in range(max_new_tokens):
+            # Truncate sequence if it exceeds context length (keep last n_ctx tokens)
+            if tokens_tensor.shape[1] > n_ctx:
+                tokens_tensor = tokens_tensor[:, -n_ctx:]
+
             # Get model predictions
             # logits: [1, seq_len, vocab_size]
             logits = self.model(tokens_tensor)
