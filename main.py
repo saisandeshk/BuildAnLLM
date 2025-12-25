@@ -502,11 +502,42 @@ if page == "Training":
             st.rerun()
 
     # Display training status
-    # Check if thread is still alive
+    # Check if thread is still alive and training flag status
     if st.session_state.training_thread is not None:
-        if not st.session_state.training_thread.is_alive() and st.session_state.training_active:
-            st.session_state.training_active = False
-            st.success("✅ Training completed!")
+        thread_alive = st.session_state.training_thread.is_alive()
+        # Check training_active_flag to see actual training status
+        training_flag_active = True
+        if "training_active_flag" in st.session_state:
+            with st.session_state.training_lock:
+                training_flag_active = st.session_state.training_active_flag[0]
+
+        # Only mark as completed if thread is dead AND flag is False (normal completion)
+        # OR if we have explicit completion logs
+        if not thread_alive and st.session_state.training_active:
+            # Check logs to determine why thread stopped
+            if st.session_state.shared_training_logs:
+                # Check last 3 logs
+                last_logs = list(st.session_state.shared_training_logs)[-3:]
+                last_logs_str = " ".join(last_logs)
+                if "Training complete!" in last_logs_str or "Completed all" in last_logs_str:
+                    st.session_state.training_active = False
+                    st.success("✅ Training completed!")
+                elif "Error during training" in last_logs_str:
+                    st.session_state.training_active = False
+                    st.error("❌ Training error occurred. Check logs for details.")
+                elif "Training stopped by user" in last_logs_str:
+                    st.session_state.training_active = False
+                    st.info("⏹️ Training stopped by user.")
+                elif not training_flag_active:
+                    # Flag is False but no explicit message - thread completed normally
+                    st.session_state.training_active = False
+                    st.success("✅ Training completed!")
+                # else: thread died but flag still True - might be a race condition, don't mark as done
+            elif not training_flag_active:
+                # No logs but flag is False - assume normal completion
+                st.session_state.training_active = False
+                st.success("✅ Training completed!")
+            # else: thread dead but flag True and no logs - might be starting up, don't mark as done
 
     if st.session_state.training_active:
         # st.info("🔄 Training in progress... (Auto-refreshing every 2 seconds)")
