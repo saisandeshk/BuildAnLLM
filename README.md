@@ -4,7 +4,10 @@
 
 This repository contains a complete, educational implementation of a transformer-based autoregressive, decoder-only language model from scratch. 
 
-The goal is twofold: pre-train an LLM from scratch using a simple, intuitive interface, and explore the codebase to understand the modularized building blocks of transformer models, with multiple implementation variants for each component. 
+There are two things I think will be helpful to those wanting to learn here. They can:
+
+- Pre-train an LLM from scratch using a simple, intuitive interface.
+- Explore the codebase to understand the modularized building blocks of transformer models, with multiple implementation variants for each component. 
 
 I built this project as I wanted to properly understand LLMs. While videos, books, and lecture notes from Andrej Karpathy, Neel Nanda, Sebastian Raschka, ARENA, Stanford's CS224N, 3Blue1Brown, Jay Alammar, and many others (links below) were incredibly helpful, I knew that to properly understand, I had to write code myself. I'm incredibly grateful to all those from whom I learned and borrowed ideas. I hope others find it helpful too!
 
@@ -26,12 +29,11 @@ The codebase includes both educational implementations (showing the math and ope
 ## Contents
 
 1. [Usage Guide](#usage-guide)
-2. [Code Structure](#code-structure)
+2. [Key Concepts](#key-concepts)
 3. [Pre-Training Pipeline](#pre-training-pipeline)
 4. [Inference and Sampling](#inference-and-sampling)
-5. [Key Concepts](#key-concepts)
-6. [Core Components Deep Dive](#core-components-deep-dive)
-7. [Resources](#resources)
+5. [Core Components Deep Dive](#core-components-deep-dive)
+6. [Resources](#resources)
 
 ---
 
@@ -128,53 +130,83 @@ uv run cli/infer.py --checkpoint checkpoints/20240101120000/final_model.pt --pro
 
 ---
 
-## Code Structure
+## Key Concepts
 
-The codebase is designed for readability and learning, with clear implementations and detailed comments throughout. You will also find alternative implementations (unused) in the code for educational purposes.
+Before diving into the implementation details, here are the key concepts that underpin this codebase:
 
+### 1. Autoregressive Language Modeling
+
+**What it is**: Predicting the next token given previous tokens in a sequence.
+
+**Example**:
 ```
-.
-├── config.py              # Model architecture configuration (ModelConfig)
-├── main.py                # Streamlit application entry point
-├── training.txt           # Training data
-├── ui_components.py       # UI helper components
-├── utils.py               # Utility functions
-├── cli/                   # Command-line interfaces
-│   ├── train.py           # Training script
-│   └── infer.py           # Inference script
-├── pages/                 # Streamlit pages
-│   ├── 1_Pre-Training.py  # Pre-training page UI
-│   └── 2_Inference.py     # Inference page UI
-├── pretraining/           # Pre-training components
-│   ├── attention/         # Multi-head self-attention
-│   │   └── attention.py   # Attention implementations (supports RoPE & ALiBi)
-│   ├── data/              # Dataset utilities
-│   │   └── dataset.py     # Dataset creation and splitting
-│   ├── embeddings/        # Token embeddings
-│   │   └── embed.py       # Embedding implementations
-│   ├── mlp/               # Feedforward networks
-│   │   └── mlp.py         # MLP implementations (GELU & SwiGLU)
-│   ├── model/             # Model definitions
-│   │   ├── model.py       # Full transformer model (GPT, LLaMA & OLMo)
-│   │   └── model_loader.py # Model loading utilities
-│   ├── normalization/     # Normalization layers
-│   │   ├── layernorm.py   # Layer normalization (GPT/OLMo style)
-│   │   └── rmsnorm.py     # RMS normalization (LLaMA style)
-│   ├── positional_embeddings/ # Positional encoding
-│   │   ├── positional_embedding.py # Learned embeddings (GPT style)
-│   │   ├── rope.py        # Rotary Position Embedding (LLaMA style)
-│   │   └── alibi.py       # ALiBi - Attention with Linear Biases (OLMo style)
-│   ├── tokenization/      # Tokenization
-│   │   └── tokenizer.py   # Tokenizer implementations (character, BPE, SentencePiece)
-│   ├── training/          # Training utilities
-│   │   ├── trainer.py     # Training loop and evaluation
-│   │   ├── training_args.py # Training hyperparameters
-│   │   └── training_ui.py # Training UI components
-│   └── transformer_blocks/ # Transformer blocks
-│       └── transformer_block.py # Transformer block implementations
-└── inference/             # Inference and text generation
-    └── sampler.py         # Text generation and sampling
+Input:  "The cat sat on the"
+Target: "cat sat on the mat"
 ```
+
+At each position, the model predicts what comes next. This is how language models learn to generate coherent text.
+
+**Why it works**: 
+- Language has structure and patterns
+- Given context, the next token is somewhat predictable
+- The model learns these patterns from data
+
+### 2. Causal Masking
+
+**What it is**: Preventing the model from seeing future tokens during training.
+
+**Why it's needed**:
+- During inference, we generate one token at a time
+- The model should only use past context
+- Training must match inference conditions
+
+**How it works**:
+- Attention scores for future positions are set to `-inf`
+- After softmax, these become 0 probability
+- The model can't attend to future tokens
+
+### 3. Residual Connections
+
+**What it is**: Adding input to output: `output = input + transformation(input)`
+
+**Why it helps**:
+- Allows gradients to flow directly through
+- Enables training of very deep networks
+- The model can learn the identity function if the transformation isn't needed
+
+### 4. Layer Normalization
+
+**What it is**: Normalizing activations across the feature dimension.
+
+**Why it helps**:
+- Stabilizes training
+- Allows higher learning rates
+- Reduces internal covariate shift
+
+**Variants**:
+- **LayerNorm** (GPT/OLMo): Normalizes by subtracting mean, then scaling
+- **RMSNorm** (LLaMA): Only scales (no mean subtraction, no bias)
+
+### 5. Positional Encoding
+
+**The Problem**: Transformers have no inherent notion of sequence order.
+
+**Solutions**:
+- **Learned Embeddings** (GPT): Fixed embeddings for each position
+- **RoPE** (LLaMA): Rotates query/key vectors by position-dependent angles
+- **ALiBi** (OLMo): Adds distance-based bias to attention scores
+
+### 6. Pre-training vs Fine-tuning
+
+**Pre-training** (what this codebase does):
+- Train on large, diverse text corpus
+- Learn general language patterns
+- Unsupervised (no labels needed)
+
+**Fine-tuning** (not included):
+- Take pre-trained model
+- Train further on specific task/domain
+- Supervised (needs labeled data)
 
 ---
 
@@ -340,86 +372,6 @@ for _ in range(max_new_tokens):
 4. **Combined**: Top-k + Top-p + Temperature
    - Most common in practice
    - Provides good balance of quality and diversity
-
----
-
-## Key Concepts
-
-Before diving into the implementation details, here are the key concepts that underpin this codebase:
-
-### 1. Autoregressive Language Modeling
-
-**What it is**: Predicting the next token given previous tokens in a sequence.
-
-**Example**:
-```
-Input:  "The cat sat on the"
-Target: "cat sat on the mat"
-```
-
-At each position, the model predicts what comes next. This is how language models learn to generate coherent text.
-
-**Why it works**: 
-- Language has structure and patterns
-- Given context, the next token is somewhat predictable
-- The model learns these patterns from data
-
-### 2. Causal Masking
-
-**What it is**: Preventing the model from seeing future tokens during training.
-
-**Why it's needed**:
-- During inference, we generate one token at a time
-- The model should only use past context
-- Training must match inference conditions
-
-**How it works**:
-- Attention scores for future positions are set to `-inf`
-- After softmax, these become 0 probability
-- The model can't attend to future tokens
-
-### 3. Residual Connections
-
-**What it is**: Adding input to output: `output = input + transformation(input)`
-
-**Why it helps**:
-- Allows gradients to flow directly through
-- Enables training of very deep networks
-- The model can learn the identity function if the transformation isn't needed
-
-### 4. Layer Normalization
-
-**What it is**: Normalizing activations across the feature dimension.
-
-**Why it helps**:
-- Stabilizes training
-- Allows higher learning rates
-- Reduces internal covariate shift
-
-**Variants**:
-- **LayerNorm** (GPT/OLMo): Normalizes by subtracting mean, then scaling
-- **RMSNorm** (LLaMA): Only scales (no mean subtraction, no bias)
-
-### 5. Positional Encoding
-
-**The Problem**: Transformers have no inherent notion of sequence order.
-
-**Solutions**:
-- **Learned Embeddings** (GPT): Fixed embeddings for each position
-- **RoPE** (LLaMA): Rotates query/key vectors by position-dependent angles
-- **ALiBi** (OLMo): Adds distance-based bias to attention scores
-
-### 6. Pre-training vs Fine-tuning
-
-**Pre-training** (what this codebase does):
-- Train on large, diverse text corpus
-- Learn general language patterns
-- Unsupervised (no labels needed)
-
-**Fine-tuning** (not included):
-- Take pre-trained model
-- Train further on specific task/domain
-- Supervised (needs labeled data)
 
 ---
 
