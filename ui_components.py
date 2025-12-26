@@ -70,16 +70,16 @@ def render_model_config_ui() -> Dict:
 
     # Preset buttons
     _render_preset_buttons(config)
-    
+
     # Model components
     _render_model_components(config)
-    
+
     # Model dimensions
     _render_model_dimensions(config)
-    
+
     # Model size selector
     _render_model_size_selector(config)
-    
+
     # RoPE settings (conditional)
     if config["positional_encoding"] == "rope":
         _render_rope_settings(config)
@@ -294,7 +294,7 @@ def generate_model_architecture_diagram(config: Dict) -> str:
     diagram.append("                         INPUT")
     diagram.append("                           |")
     diagram.append("                           v")
-    diagram.append(f"                   [Token Embeddings]")
+    diagram.append("                   [Token Embeddings]")
     diagram.append(f"                    (vocab → {d_model})")
     diagram.append("                           |")
     if pos_enc == "learned":
@@ -362,117 +362,103 @@ def generate_model_architecture_diagram(config: Dict) -> str:
 def generate_graphviz_architecture(config: Dict) -> str:
     """Generate Graphviz DOT code for transformer architecture."""
     n_layers = config.get("n_layers", 4)
-    d_model = config.get("d_model", 256)
     n_heads = config.get("n_heads", 4)
-    d_mlp = config.get("d_mlp", 1024)
     pos_enc = config.get("positional_encoding", "learned")
-    norm = config.get("normalization", "layernorm")
     activation = config.get("activation", "gelu")
 
     # Start building the DOT code
     dot = []
     dot.append('digraph TransformerArchitecture {')
     dot.append('    bgcolor="black";')
-    dot.append('    rankdir=TB;')
-    dot.append('    splines=ortho;')  # Use orthogonal lines
-    dot.append('    nodesep=0.8;')
-    dot.append('    ranksep=0.8;')
-    dot.append('    node [shape=box, style=filled, fillcolor="#4a4a4a", fontcolor="white", fontname="Arial", fontsize=11, penwidth=1.5, color="#888888", height=0.5];')
-    dot.append('    edge [color="#888888", penwidth=1.5, arrowsize=0.8, fontcolor="white", fontsize=9];')
-    dot.append('    ')
+    dot.append('    rankdir=BT;')  # Bottom to top like the reference
+    dot.append('    splines=ortho;')
+    dot.append('    nodesep=0.6;')
+    dot.append('    ranksep=0.7;')
 
-    # Input/output nodes
-    dot.append('    tokens [label="tokens", fillcolor="#3a3a3a"];')
-    dot.append('    embed [label="embed", fillcolor="#5a5a4a"];')
+    # Node styles
+    dot.append('    node [shape=box, style=filled, fillcolor="#5a5a5a", fontcolor="white", ')
+    dot.append('          fontname="Arial", fontsize=10, height=0.5, width=1.2];')
+    dot.append('    edge [color="#aaaaaa", penwidth=1.5, arrowsize=0.7];')
+    dot.append('')
 
-    # Track residual stream positions
-    residual_points = []
+    # Create nodes
+    dot.append('    // Input/Output nodes')
+    dot.append('    tokens [label="tokens", fillcolor="#4a4a4a"];')
+    dot.append('    embed [label="embed", fillcolor="#6a6a4a"];')
+    dot.append('    logits [label="logits", fillcolor="#4a4a4a"];')
+    dot.append('    unembed [label="unembed", fillcolor="#6a6a4a"];')
 
-    # Initial residual point
-    dot.append('    x0 [label="x₀", shape=plaintext, fontcolor="white", fontsize=10];')
-    residual_points.append('x0')
+    # Create x nodes (residual stream points)
+    dot.append('')
+    dot.append('    // Residual stream points')
+    dot.append('    x0 [shape=plaintext, label="x₀", fontcolor="#cccccc"];')
 
-    # For each layer, create attention heads, MLP, and addition nodes
     for i in range(n_layers):
-        layer_id = i + 1
+        dot.append(f'    x{i+1} [shape=plaintext, label="x_{i+1}", fontcolor="#cccccc"];')
+        dot.append(f'    x{i+1}_post [shape=plaintext, label="x_{i+2}", fontcolor="#cccccc"];')
 
-        # Create attention block
-        head_label = f"h_{layer_id}"
+    dot.append(f'    x_final [shape=plaintext, label="x_{n_layers-1}", fontcolor="#cccccc"];')
+
+    # Create attention and MLP blocks
+    dot.append('')
+    dot.append('    // Attention and MLP blocks')
+    for i in range(n_layers):
+        layer = i + 1
+
+        # Attention heads
+        heads_label = f"h₀  h₁  ...  h_{n_heads-1}"
         if pos_enc == "rope":
-            head_label += f"\\n({n_heads} heads, RoPE)"
+            heads_label += "\\n(RoPE)"
         elif pos_enc == "alibi":
-            head_label += f"\\n({n_heads} heads, ALiBi)"
-        else:
-            head_label += f"\\n({n_heads} heads)"
-        dot.append(f'    h{layer_id} [label="{head_label}", fillcolor="#5a4a5a"];')
+            heads_label += "\\n(ALiBi)"
 
-        # Addition node after attention
-        dot.append(f'    add_attn{layer_id} [label="+", shape=circle, width=0.3, fillcolor="#6a5a4a"];')
+        dot.append(f'    heads{layer} [label="{heads_label}", fillcolor="#6a5a5a"];')
 
-        # Residual point after attention
-        dot.append(f'    x{layer_id}_mid [label="x_{layer_id}+1", shape=plaintext, fontcolor="white", fontsize=10];')
-
-        # MLP node
-        mlp_label = f"MLP m"
+        # MLP
+        mlp_label = "MLP  m"
         if activation == "swiglu":
-            mlp_label = f"MLP m\\n(SwiGLU)"
+            mlp_label += "\\n(SwiGLU)"
         elif activation == "gelu":
-            mlp_label = f"MLP m\\n(GELU)"
-        dot.append(f'    mlp{layer_id} [label="{mlp_label}", fillcolor="#5a5a5a"];')
+            mlp_label += "\\n(GELU)"
 
-        # Addition node after MLP
-        dot.append(f'    add_mlp{layer_id} [label="+", shape=circle, width=0.3, fillcolor="#6a5a4a"];')
+        dot.append(f'    mlp{layer} [label="{mlp_label}", fillcolor="#5a6a5a"];')
 
-        # Residual point after MLP
-        if i < n_layers - 1:
-            dot.append(f'    x{layer_id} [label="x_{layer_id}+2", shape=plaintext, fontcolor="white", fontsize=10];')
-        else:
-            dot.append(f'    x_final [label="x_{n_layers-1}", shape=plaintext, fontcolor="white", fontsize=10];')
+    dot.append('')
+    dot.append('    // Connections')
 
-    # Output nodes
-    dot.append('    unembed [label="unembed", fillcolor="#5a5a4a"];')
-    dot.append('    logits [label="logits", fillcolor="#3a3a3a"];')
-    dot.append('    ')
-
-    # Add positional embedding if learned
-    if pos_enc == "learned":
-        dot.append('    pos_embed [label="+PE", shape=box, fillcolor="#4a5a4a"];')
-
-    # Connect everything
-    dot.append('    # Connections')
+    # Input flow
     dot.append('    tokens -> embed;')
 
+    # Handle positional encoding
     if pos_enc == "learned":
-        dot.append('    embed -> pos_embed;')
-        dot.append('    pos_embed -> x0;')
+        dot.append('    embed -> x0 [label="+PE", fontsize=8, fontcolor="yellow"];')
     else:
         dot.append('    embed -> x0;')
 
-    # Connect layers
+    # Layer connections
     for i in range(n_layers):
-        layer_id = i + 1
-        prev_point = 'x0' if i == 0 else f'x{i}'
+        layer = i + 1
+        prev_x = 'x0' if i == 0 else f'x{i}_post'
+        curr_x = f'x{layer}'
+        post_x = f'x{layer}_post'
 
-        # Connect to attention block
-        dot.append(f'    {prev_point} -> h{layer_id};')
-        dot.append(f'    h{layer_id} -> add_attn{layer_id};')
+        # Main residual stream
+        dot.append(f'    {prev_x} -> {curr_x};')
 
-        # Residual connection to addition
-        dot.append(f'    {prev_point} -> add_attn{layer_id} [constraint=false];')
+        # Attention branch
+        dot.append(f'    {curr_x} -> heads{layer};')
+        dot.append(f'    heads{layer} -> {curr_x} [label="+", fontsize=10, fontcolor="yellow"];')
 
-        # From attention to MLP
-        dot.append(f'    add_attn{layer_id} -> x{layer_id}_mid;')
-        dot.append(f'    x{layer_id}_mid -> mlp{layer_id};')
-        dot.append(f'    mlp{layer_id} -> add_mlp{layer_id};')
-        dot.append(f'    x{layer_id}_mid -> add_mlp{layer_id} [constraint=false];')
+        # Continue to MLP
+        dot.append(f'    {curr_x} -> {post_x};')
 
-        # To next residual point
-        if i < n_layers - 1:
-            dot.append(f'    add_mlp{layer_id} -> x{layer_id};')
-        else:
-            dot.append(f'    add_mlp{n_layers} -> x_final;')
+        # MLP branch
+        dot.append(f'    {post_x} -> mlp{layer};')
+        dot.append(f'    mlp{layer} -> {post_x} [label="+", fontsize=10, fontcolor="yellow"];')
 
-    # Final output
+    # Output
+    last_x = f'x{n_layers}_post'
+    dot.append(f'    {last_x} -> x_final;')
     dot.append('    x_final -> unembed;')
     dot.append('    unembed -> logits;')
 
@@ -505,7 +491,6 @@ def render_model_architecture_diagram(config: Dict) -> None:
             try:
                 import graphviz
                 dot_code = generate_graphviz_architecture(config)
-                graph = graphviz.Source(dot_code)
                 st.graphviz_chart(dot_code)
             except ImportError:
                 st.warning("Graphviz is not installed. Install it with: `pip install graphviz`")
