@@ -4,7 +4,7 @@
 
 This repository contains a complete, educational implementation of a transformer-based autoregressive, decoder-only language model from scratch. 
 
-This repository offers two learning objectives:
+It offers two learning objectives:
 
 - **Pre-train an LLM from scratch** using a simple, intuitive interface.
 - **Explore the codebase** to understand the modularized building blocks of transformer models, with multiple implementation variants for each component. 
