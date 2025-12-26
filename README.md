@@ -55,7 +55,13 @@ The app will open in your browser with the following pages:
 
 ### Pre-Training
 
-**Using the Streamlit UI:**
+1. Loads training text file
+2. Creates tokenizer and dataset
+3. Initializes model based on selected architecture and configuration
+4. Trains for specified epochs with real-time loss visualization
+5. Saves checkpoints to `checkpoints/YYYYMMDDHHMMSS/` (timestamped folders)
+
+#### UI
 
 1. Upload training data or use the default `training.txt` file
 2. Select an architecture preset, or choose custom parameters:
@@ -66,20 +72,7 @@ The app will open in your browser with the following pages:
 4. Set training hyperparameters (batch size, learning rate, epochs, etc.)
 5. Click "Start Training" to begin
 
-**What happens**:
-1. Loads training text file
-2. Creates tokenizer and dataset
-3. Initializes model based on selected architecture and configuration
-4. Trains for specified epochs with real-time loss visualization
-5. Saves checkpoints to `checkpoints/YYYYMMDDHHMMSS/` (timestamped folders)
-
-**Tokenizer Types**:
-- **Character-level**: Each character is a token. Simple but large vocabulary.
-- **BPE-Simple**: Learns subword units. Good balance of vocabulary size and efficiency.
-- **BPE-TikToken**: Learns subword units. Good balance of vocabulary size and efficiency.
-- **SentencePiece**: Similar to BPE but handles whitespace differently. Often used in multilingual models.
-
-**Command-line Training:**
+#### Command-line
 
 You can also train models using the command-line script:
 ```bash
@@ -104,20 +97,6 @@ uv run cli/train.py --no_einops
 
 ### Inference
 
-**Using the Streamlit UI:**
-
-1. Select a checkpoint from the dropdown (auto-scans `checkpoints/` directory)
-2. Enter a prompt
-3. Configure sampling parameters (temperature, top-k, top-p)
-4. Click "Generate" to create text
-
-**Command-line Inference:**
-
-```bash
-# Generate text from trained model
-uv run cli/infer.py --checkpoint checkpoints/20240101120000/final_model.pt --prompt "First Citizen:"
-```
-
 **Options**:
 - `--checkpoint`: Path to model checkpoint (e.g., `checkpoints/20240101120000/final_model.pt`)
 - `--prompt`: Starting text prompt
@@ -127,6 +106,20 @@ uv run cli/infer.py --checkpoint checkpoints/20240101120000/final_model.pt --pro
 - `--top_p`: Top-p sampling (optional, default: 0.9)
 - `--tokenizer_type`: Tokenizer type (optional, auto-detected from checkpoint; only needed for old checkpoints)
 - `--text_file`: Text file for character tokenizer initialization (default: `training.txt`, only needed for character tokenizer)
+
+### UI
+
+1. Select a checkpoint from the dropdown (auto-scans `checkpoints/` directory)
+2. Enter a prompt
+3. Configure sampling parameters (temperature, top-k, top-p)
+4. Click "Generate" to create text
+
+#### Command-line
+
+```bash
+# Generate text from trained model
+uv run cli/infer.py --checkpoint checkpoints/20240101120000/final_model.pt --prompt "First Citizen:"
+```
 
 ---
 
