@@ -371,9 +371,8 @@ def generate_graphviz_architecture(config: Dict) -> str:
     dot.append('digraph TransformerArchitecture {')
     dot.append('    bgcolor="black";')
     dot.append('    rankdir=BT;')  # Bottom to top like the reference
-    dot.append('    splines=ortho;')
-    dot.append('    nodesep=0.6;')
-    dot.append('    ranksep=0.7;')
+    dot.append('    nodesep=0.3;')
+    dot.append('    ranksep=0.8;')
 
     # Node styles
     dot.append('    node [shape=box, style=filled, fillcolor="#5a5a5a", fontcolor="white", ')
@@ -392,36 +391,40 @@ def generate_graphviz_architecture(config: Dict) -> str:
     dot.append('')
     dot.append('    // Residual stream points')
     dot.append('    x0 [shape=plaintext, label="x₀", fontcolor="#cccccc"];')
+    dot.append('    x1 [shape=plaintext, label="x_{i+1}", fontcolor="#cccccc"];')
+    dot.append('    x2 [shape=plaintext, label="x_{i+2}", fontcolor="#cccccc"];')
+    dot.append('    x_final [shape=plaintext, label="x_{-1}", fontcolor="#cccccc"];')
 
-    for i in range(n_layers):
-        dot.append(f'    x{i+1} [shape=plaintext, label="x_{i+1}", fontcolor="#cccccc"];')
-        dot.append(f'    x{i+1}_post [shape=plaintext, label="x_{i+2}", fontcolor="#cccccc"];')
-
-    dot.append(f'    x_final [shape=plaintext, label="x_{n_layers-1}", fontcolor="#cccccc"];')
-
-    # Create attention and MLP blocks
+    # Residual block in a cluster
     dot.append('')
-    dot.append('    // Attention and MLP blocks')
-    for i in range(n_layers):
-        layer = i + 1
+    dot.append('    // One residual block (repeated)')
+    dot.append('    subgraph cluster_block {')
+    dot.append('        style=dashed;')
+    dot.append('        color="#ffff88";')
+    dot.append('        penwidth=2;')
+    dot.append(f'        label="×{n_layers}";')
+    dot.append('        fontcolor="#ffff88";')
+    dot.append('        fontsize=14;')
+    dot.append('        ')
 
-        # Attention heads
-        heads_label = f"h₀  h₁  ...  h_{n_heads-1}"
-        if pos_enc == "rope":
-            heads_label += "\\n(RoPE)"
-        elif pos_enc == "alibi":
-            heads_label += "\\n(ALiBi)"
+    # Attention heads
+    heads_label = f"h₀  h₁  ...  h_{n_heads-1}"
+    if pos_enc == "rope":
+        heads_label += "\\n(RoPE)"
+    elif pos_enc == "alibi":
+        heads_label += "\\n(ALiBi)"
 
-        dot.append(f'    heads{layer} [label="{heads_label}", fillcolor="#6a5a5a"];')
+    dot.append(f'        heads [label="{heads_label}", fillcolor="#6a5a5a"];')
 
-        # MLP
-        mlp_label = "MLP  m"
-        if activation == "swiglu":
-            mlp_label += "\\n(SwiGLU)"
-        elif activation == "gelu":
-            mlp_label += "\\n(GELU)"
+    # MLP
+    mlp_label = "MLP  m"
+    if activation == "swiglu":
+        mlp_label += "\\n(SwiGLU)"
+    elif activation == "gelu":
+        mlp_label += "\\n(GELU)"
 
-        dot.append(f'    mlp{layer} [label="{mlp_label}", fillcolor="#5a6a5a"];')
+    dot.append(f'        mlp [label="{mlp_label}", fillcolor="#5a6a5a"];')
+    dot.append('    }')
 
     dot.append('')
     dot.append('    // Connections')
@@ -435,32 +438,19 @@ def generate_graphviz_architecture(config: Dict) -> str:
     else:
         dot.append('    embed -> x0;')
 
-    # Layer connections
-    for i in range(n_layers):
-        layer = i + 1
-        prev_x = 'x0' if i == 0 else f'x{i}_post'
-        curr_x = f'x{layer}'
-        post_x = f'x{layer}_post'
+    # One block connections
+    dot.append('    x0 -> x1;')
+    dot.append('    x1 -> heads [dir=both, label="+", fontsize=10, fontcolor="yellow"];')
+    dot.append('    x1 -> x2;')
+    dot.append('    x2 -> mlp [dir=both, label="+", fontsize=10, fontcolor="yellow"];')
 
-        # Main residual stream
-        dot.append(f'    {prev_x} -> {curr_x};')
-
-        # Attention branch
-        dot.append(f'    {curr_x} -> heads{layer};')
-        dot.append(f'    heads{layer} -> {curr_x} [label="+", fontsize=10, fontcolor="yellow"];')
-
-        # Continue to MLP
-        dot.append(f'    {curr_x} -> {post_x};')
-
-        # MLP branch
-        dot.append(f'    {post_x} -> mlp{layer};')
-        dot.append(f'    mlp{layer} -> {post_x} [label="+", fontsize=10, fontcolor="yellow"];')
+    # Repetition indicator
+    dot.append('    x2 -> x_final [label="...", fontsize=12, fontcolor="#888888"];')
 
     # Output
-    last_x = f'x{n_layers}_post'
-    dot.append(f'    {last_x} -> x_final;')
     dot.append('    x_final -> unembed;')
     dot.append('    unembed -> logits;')
+
 
     dot.append('}')
 
