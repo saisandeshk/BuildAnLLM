@@ -103,39 +103,39 @@ class SFTTrainer:
                 desc=f"Evaluating {split_name}",
                 leave=False,
             ):
-            # Random batch
-            # idx: [batch_size] - random indices
-            idx = torch.randint(0, len(split_X), (self.args.batch_size,))
-            # x_batch: [batch_size, seq_len] - input sequences
-            # y_batch: [batch_size, seq_len] - target sequences
-            # masks_batch: [batch_size, seq_len] - loss masks (1 for response, 0 for prompt)
-            x_batch = split_X[idx].to(self.device)
-            y_batch = split_Y[idx].to(self.device)
-            masks_batch = split_masks[idx].to(self.device)
+                # Random batch
+                # idx: [batch_size] - random indices
+                idx = torch.randint(0, len(split_X), (self.args.batch_size,))
+                # x_batch: [batch_size, seq_len] - input sequences
+                # y_batch: [batch_size, seq_len] - target sequences
+                # masks_batch: [batch_size, seq_len] - loss masks (1 for response, 0 for prompt)
+                x_batch = split_X[idx].to(self.device)
+                y_batch = split_Y[idx].to(self.device)
+                masks_batch = split_masks[idx].to(self.device)
 
-            # Forward pass
-            # logits: [batch_size, seq_len, vocab_size] - model predictions
-            logits = self.model(x_batch)
+                # Forward pass
+                # logits: [batch_size, seq_len, vocab_size] - model predictions
+                logits = self.model(x_batch)
 
-            # Compute loss only on response tokens (where mask == 1)
-            # This is the key difference from pre-training: we ignore loss on prompt tokens
-            # Reshape for cross_entropy
-            # logits_flat: [batch_size * seq_len, vocab_size]
-            # targets_flat: [batch_size * seq_len]
-            # masks_flat: [batch_size * seq_len] - 1 for response, 0 for prompt
-            logits_flat = logits.view(-1, logits.size(-1))
-            targets_flat = y_batch.view(-1)
-            masks_flat = masks_batch.view(-1)
+                # Compute loss only on response tokens (where mask == 1)
+                # This is the key difference from pre-training: we ignore loss on prompt tokens
+                # Reshape for cross_entropy
+                # logits_flat: [batch_size * seq_len, vocab_size]
+                # targets_flat: [batch_size * seq_len]
+                # masks_flat: [batch_size * seq_len] - 1 for response, 0 for prompt
+                logits_flat = logits.view(-1, logits.size(-1))
+                targets_flat = y_batch.view(-1)
+                masks_flat = masks_batch.view(-1)
 
-            # Cross-entropy loss (per token, before masking)
-            # loss_unmasked: [batch_size * seq_len] - loss for each position
-            loss_unmasked = F.cross_entropy(
-                logits_flat, targets_flat, reduction='none'
-            )
-            # Apply mask: only compute loss on response tokens
-            # loss_masked: scalar - average loss over response tokens only
-            loss_masked = (loss_unmasked * masks_flat).sum() / masks_flat.sum().clamp(min=1)
-            losses[k] = loss_masked.item()
+                # Cross-entropy loss (per token, before masking)
+                # loss_unmasked: [batch_size * seq_len] - loss for each position
+                loss_unmasked = F.cross_entropy(
+                    logits_flat, targets_flat, reduction='none'
+                )
+                # Apply mask: only compute loss on response tokens
+                # loss_masked: scalar - average loss over response tokens only
+                loss_masked = (loss_unmasked * masks_flat).sum() / masks_flat.sum().clamp(min=1)
+                losses[k] = loss_masked.item()
             out[split_name] = losses.mean().item()
         self.model.train()
         return out
