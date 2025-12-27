@@ -7,7 +7,7 @@ This repository contains a complete, educational implementation of a transformer
 It offers three learning objectives:
 
 - **Pre-train an LLM from scratch** using a simple, intuitive interface.
-- **Fine-tune a pre-trained model** on prompt/response pairs using supervised fine-tuning (SFT).
+- **Fine-tune a pre-trained model** on prompt/response pairs using supervised fine-tuning (SFT), with support for both full-parameter fine-tuning and parameter-efficient fine-tuning via LoRA.
 - **Explore the codebase** to understand the modularized building blocks of transformer models, with multiple implementation variants for each component. 
 
 Throughout the interface, users can view the actual code being executed (with direct GitHub links) and the underlying equations, all dynamically tailored to their model configuration. During pre-training, an interactive architecture diagram is also displayed.
