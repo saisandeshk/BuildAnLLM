@@ -936,7 +936,7 @@ def render_model_code_snippets(config: Dict) -> None:
     """
     github_repo_url = "https://github.com/jammastergirish/BuildAnLLM"
 
-    with st.expander("💻 Code Implementation", expanded=False):
+    with st.expander("💻 Code", expanded=False):
         components = _determine_components_to_show(config)
 
         # 1. Model (entire class)
@@ -1070,6 +1070,134 @@ def _render_function(
         return False
 
 
+def render_inference_equations(
+    temperature: float = 0.8,
+    top_k: Optional[int] = None,
+    top_p: float = 0.9
+) -> None:
+    """Render mathematical equations for text generation/inference."""
+    with st.expander("📐 Equations", expanded=False):
+        st.markdown("### Key Notation")
+        st.markdown("""
+        - **prompt**: Starting text input
+        - **logits**: Raw model outputs (before softmax)
+        - **probs**: Probability distribution over vocabulary
+        - **T**: Temperature (scaling factor)
+        - **k**: Top-k sampling parameter
+        - **p**: Top-p (nucleus) sampling threshold
+        - **V**: Vocabulary size
+        """)
+
+        st.markdown("---")
+        st.markdown("### 1. Autoregressive Generation")
+        st.markdown(
+            "Text is generated one token at a time, using previously generated tokens as context:")
+        st.latex(r"t_0, t_1, \ldots, t_{n-1} \quad \text{(prompt tokens)}")
+        st.latex(
+            r"t_n, t_{n+1}, \ldots, t_{n+m-1} \quad \text{(generated tokens)}")
+        st.markdown("At each step $i$, the model predicts the next token:")
+        st.latex(
+            r"\text{logits}_i = \text{model}(t_0, t_1, \ldots, t_{i-1}) \quad \text{logits}_i \in \mathbb{R}^V")
+        st.latex(
+            r"t_i \sim \text{sample}(\text{logits}_i) \quad \text{(sample next token)}")
+
+        st.markdown("---")
+        st.markdown("### 2. Temperature Scaling")
+        st.markdown("Temperature controls the randomness of sampling:")
+        st.latex(r"\text{logits}_{\text{scaled}} = \frac{\text{logits}}{T}")
+        st.latex(
+            r"\text{probs} = \text{softmax}(\text{logits}_{\text{scaled}})")
+        st.markdown("**Effect:**")
+        st.markdown("""
+        - **$T < 1$**: Sharper distribution (more focused, less random)
+        - **$T = 1$**: Original distribution (no scaling)
+        - **$T > 1$**: Flatter distribution (more random, more diverse)
+        """)
+        st.markdown(f"**Your setting:** $T = {temperature}$")
+
+        if top_k is not None:
+            st.markdown("---")
+            st.markdown("### 3. Top-k Sampling")
+            st.markdown("Only sample from the $k$ most likely tokens:")
+            st.latex(
+                r"\text{top\_k\_indices} = \text{argsort}(\text{logits})[:k]")
+            st.latex(
+                r"\text{logits}_i = \begin{cases} \text{logits}_i & \text{if } i \in \text{top\_k\_indices} \\ -\infty & \text{otherwise} \end{cases}")
+            st.markdown(
+                "**Effect:** Prevents sampling from low-probability tokens, reducing incoherent outputs.")
+            st.markdown(f"**Your setting:** $k = {top_k}$")
+        else:
+            st.markdown("---")
+            st.markdown("### 3. Top-k Sampling")
+            st.markdown("**Not enabled** (sampling from all tokens)")
+
+        st.markdown("---")
+        st.markdown("### 4. Top-p (Nucleus) Sampling")
+        st.markdown(
+            "Sample from the smallest set of tokens whose cumulative probability exceeds $p$:")
+        st.latex(
+            r"\text{sorted\_probs} = \text{sort}(\text{probs}, \text{descending=True})")
+        st.latex(
+            r"\text{cumulative\_probs} = \text{cumsum}(\text{sorted\_probs})")
+        st.latex(
+            r"\text{min\_set\_size} = \min\{n : \sum_{i=1}^n \text{sorted\_probs}_i \geq p\}")
+        st.latex(
+            r"\text{logits}_i = \begin{cases} \text{logits}_i & \text{if } i \text{ in min set} \\ -\infty & \text{otherwise} \end{cases}")
+        st.markdown(
+            "**Effect:** Dynamically adjusts the number of tokens based on distribution shape.")
+        st.markdown(f"**Your setting:** $p = {top_p}$")
+
+        st.markdown("---")
+        st.markdown("### 5. Final Sampling")
+        st.markdown(
+            "After applying temperature, top-k, and top-p, sample from the resulting distribution:")
+        st.latex(
+            r"\text{probs} = \text{softmax}(\text{logits}_{\text{filtered}} / T)")
+        st.latex(r"t_{\text{next}} \sim \text{Multinomial}(\text{probs})")
+        st.markdown(
+            "**In words:** Sample one token according to the filtered probability distribution.")
+
+        st.markdown("---")
+        st.markdown("### 6. Complete Generation Process")
+        st.markdown("""
+        **Algorithm:**
+        1. Encode prompt: $\\text{tokens} = \\text{tokenizer.encode}(\\text{prompt})$
+        2. For $i = 0$ to $\\text{max\\_new\\_tokens} - 1$:
+           - Get logits: $\\text{logits} = \\text{model}(\\text{tokens})[-1]$
+           - Apply temperature: $\\text{logits} = \\text{logits} / T$
+           - Apply top-k (if enabled): Filter to top $k$ tokens
+           - Apply top-p (if enabled): Filter to nucleus set
+           - Sample: $t_i \\sim \\text{softmax}(\\text{logits})$
+           - Append: $\\text{tokens} = \\text{tokens} + [t_i]$
+        3. Decode: $\\text{text} = \\text{tokenizer.decode}(\\text{tokens})$
+        """)
+
+        st.markdown("---")
+        st.markdown("### Summary")
+        st.markdown(f"""
+        **Your Configuration:**
+        - **Temperature**: $T = {temperature}$ ({'More focused' if temperature < 1 else 'More random' if temperature > 1 else 'Balanced'})
+        - **Top-k**: {'Enabled' if top_k is not None else 'Disabled'} {f'($k = {top_k}$)' if top_k is not None else ''}
+        - **Top-p**: {'Enabled' if top_p > 0 else 'Disabled'} {f'($p = {top_p}$)' if top_p > 0 else ''}
+        """)
+
+
+def render_inference_code_snippets() -> None:
+    """
+    Render relevant code snippets for inference/text generation.
+    """
+    github_repo_url = "https://github.com/jammastergirish/BuildAnLLM"
+
+    with st.expander("💻 Code", expanded=False):
+        # Transformer Sampler (entire class)
+        _render_entire_class(
+            "1. Transformer Sampler",
+            "inference.sampler",
+            "TransformerSampler",
+            github_repo_url
+        )
+
+
 def render_finetuning_code_snippets(use_lora: bool = False) -> None:
     """
     Render relevant code snippets for fine-tuning based on configuration.
@@ -1079,7 +1207,7 @@ def render_finetuning_code_snippets(use_lora: bool = False) -> None:
     """
     github_repo_url = "https://github.com/jammastergirish/BuildAnLLM"
 
-    with st.expander("💻 Code Implementation", expanded=False):
+    with st.expander("💻 Code", expanded=False):
         # 1. SFT Dataset (entire class)
         _render_entire_class(
             "1. SFT Dataset",

@@ -594,16 +594,6 @@ if use_lora:
             f"(rank={lora_rank}). This is much smaller than full fine-tuning!"
         )
 
-# Show equations (after LoRA config so values are available)
-render_finetuning_equations(
-    use_lora=use_lora,
-    lora_rank=lora_rank,
-    lora_alpha=lora_alpha,
-)
-
-# Show code implementation
-render_finetuning_code_snippets(use_lora=use_lora)
-
 # CSV upload
 st.header("3. Upload Training Data")
 uploaded_csv = st.file_uploader(
@@ -659,8 +649,20 @@ max_length = st.number_input(
     help="Maximum length for prompt+response sequences"
 )
 
+st.header("5. Undestand Your Model")
+
+# Show equations (after LoRA config so values are available)
+render_finetuning_equations(
+    use_lora=use_lora,
+    lora_rank=lora_rank,
+    lora_alpha=lora_alpha,
+)
+
+# Show code implementation
+render_finetuning_code_snippets(use_lora=use_lora)
+
 # Start fine-tuning button
-st.header("5. Start Fine-Tuning")
+st.header("6. Start Fine-Tuning")
 col1, col2, col3 = st.columns([1, 1, 2])
 
 with col1:

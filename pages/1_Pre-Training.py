@@ -397,6 +397,8 @@ with st.expander("Advanced Settings", expanded=False):
         save_interval = st.number_input(
             "Save Interval", min_value=100, max_value=5000, value=1000)
 
+st.header("5. Undestand Your Model")
+
 # Show architecture diagram
 render_model_architecture_diagram(model_config)
 
@@ -407,7 +409,7 @@ render_model_equations(model_config)
 render_model_code_snippets(model_config)
 
 # Start training button
-st.header("5. Start Training")
+st.header("6. Start Training")
 col1, col2, col3 = st.columns([1, 1, 2])
 
 with col1:
