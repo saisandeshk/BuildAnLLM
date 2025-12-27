@@ -175,7 +175,7 @@ def _handle_training_completion(training_flag_active: bool):
 
 def _render_all_losses_graph(all_losses_data):
     """Render all losses graph."""
-    st.subheader("📈 All Losses (Real-time)")
+    st.subheader("📈 Training Loss")
     df_all = pd.DataFrame({
         "Iteration": all_losses_data["iterations"],
         "Current Loss": all_losses_data["current_losses"],
@@ -194,7 +194,7 @@ def _render_all_losses_graph(all_losses_data):
         line={"color": "purple", "width": 2}
     ))
     fig_all.update_layout(
-        title="All Training Losses (updated every 10 iterations)",
+        title="Training Losses (updated every 10 iterations)",
         xaxis_title="Iteration", yaxis_title="Loss",
         hovermode="x unified", height=400,
         yaxis={"range": [0, None]}
