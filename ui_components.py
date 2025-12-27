@@ -391,6 +391,250 @@ def render_model_architecture_diagram(config: Dict) -> None:
         """)
 
 
+def render_model_equations(config: Dict) -> None:
+    """Render full mathematical equations for the model architecture."""
+    with st.expander("📐 Equations", expanded=False):
+        d_model = config.get("d_model", 256)
+        n_heads = config.get("n_heads", 4)
+        d_head = config.get("d_head", 64)
+        d_mlp = config.get("d_mlp", 1024)
+        pos_enc = config.get("positional_encoding", "learned")
+        norm = config.get("normalization", "layernorm")
+        activation = config.get("activation", "gelu")
+        rope_theta = config.get("rope_theta", 10000.0)
+
+        st.markdown("### Key Notation")
+        st.markdown("""
+        - **x**: Input tensor $[B, L, d_{model}]$ where $B$ = batch size, $L$ = sequence length
+        - **h**: Hidden state $[B, L, d_{model}]$
+        - **W_Q, W_K, W_V, W_O**: Attention weight matrices
+        - **W_in, W_out**: MLP weight matrices
+        - **b_in, b_out**: MLP bias vectors
+        - **d_model**: Model dimension
+        - **d_head**: Dimension per attention head
+        - **n_heads**: Number of attention heads
+        - **d_mlp**: MLP hidden dimension
+        - **i, j**: Position indices
+        """)
+
+        st.markdown("---")
+        st.markdown("### 1. Token Embedding")
+        st.latex(r"E \in \mathbb{R}^{V \times d_{model}}")
+        st.latex(
+            r"x_0 = E[\text{tokens}] \quad \text{where } x_0 \in \mathbb{R}^{B \times L \times d_{model}}")
+        st.markdown(
+            f"where $V$ = vocabulary size, $B$ = batch size, $L$ = sequence length, $d_{{model}} = {d_model}$")
+
+        st.markdown("---")
+        st.markdown("### 2. Positional Encoding")
+
+        if pos_enc == "learned":
+            st.markdown("**Learned Positional Embeddings (GPT-style)**")
+            st.latex(r"P \in \mathbb{R}^{L_{max} \times d_{model}}")
+            st.latex(r"\text{pos} = P[\text{positions}]")
+            st.latex(r"x_0 = x_0 + \text{pos}")
+            st.markdown(
+                f"where $L_{{max}}$ = maximum sequence length, $d_{{model}} = {d_model}$")
+        elif pos_enc == "rope":
+            st.markdown("**RoPE (Rotary Position Embedding) - LLaMA-style**")
+            st.markdown("For each position $i$ and head dimension $d$:")
+            st.latex(r"\theta_d = 10000^{-2d/d_{head}}")
+            st.latex(
+                r"R_i = \begin{bmatrix} \cos(\theta_d \cdot i) & -\sin(\theta_d \cdot i) \\ \sin(\theta_d \cdot i) & \cos(\theta_d \cdot i) \end{bmatrix}")
+            st.markdown(
+                "Applied to Q and K vectors during attention (see Attention section):")
+            st.latex(
+                r"q_{\text{rotated}} = R_i \cdot q \quad \text{(rotate query by position } i\text{)}")
+            st.latex(
+                r"k_{\text{rotated}} = R_j \cdot k \quad \text{(rotate key by position } j\text{)}")
+            st.markdown(
+                f"where $\\theta = {rope_theta}$ (base frequency), $d_{{head}} = {d_head}$")
+        elif pos_enc == "alibi":
+            st.markdown(
+                "**ALiBi (Attention with Linear Biases) - OLMo-style**")
+            st.latex(r"\text{bias}(i, j) = -m_h \cdot |i - j|")
+            st.markdown("where $m_h$ is a head-specific slope:")
+            st.latex(r"m_h = 2^{-8h/n_{heads}}")
+            st.markdown(
+                "Applied to attention scores during attention computation (see Attention section):")
+            st.latex(
+                r"\text{attn\_scores} = \text{attn\_scores} + \text{bias\_matrix}")
+            st.markdown(f"where $n_{{heads}} = {n_heads}$")
+
+        st.markdown("---")
+        st.markdown("### 3. Transformer Block (Repeated)")
+        st.markdown("""
+        Each transformer block consists of:
+        1. Pre-norm attention with residual connection
+        2. Pre-norm MLP with residual connection
+        """)
+
+        st.markdown("#### 3.1 Attention Sub-block")
+
+        if norm == "layernorm":
+            st.markdown("**Pre-Normalization (LayerNorm):**")
+            st.latex(r"\mu = \frac{1}{d_{model}} \sum_{k=1}^{d_{model}} x_k")
+            st.latex(
+                r"\sigma^2 = \frac{1}{d_{model}} \sum_{k=1}^{d_{model}} (x_k - \mu)^2")
+            st.latex(
+                r"x_{\text{norm}} = \frac{x - \mu}{\sqrt{\sigma^2 + \epsilon}} \odot \gamma + \beta")
+            st.markdown(
+                "where $\\epsilon = 10^{-5}$ (small constant), $\\gamma$ and $\\beta$ are learnable parameters")
+        elif norm == "rmsnorm":
+            st.markdown("**Pre-Normalization (RMSNorm):**")
+            st.latex(
+                r"\sigma^2 = \frac{1}{d_{model}} \sum_{k=1}^{d_{model}} x_k^2")
+            st.latex(
+                r"x_{\text{norm}} = \frac{x}{\sqrt{\sigma^2 + \epsilon}} \odot \gamma")
+            st.markdown(
+                "where $\\epsilon = 10^{-5}$ (small constant), $\\gamma$ is a learnable scale parameter (no bias $\\beta$)")
+
+        st.markdown("**Multi-Head Attention:**")
+        st.markdown("Project to Q, K, V for all heads:")
+        st.latex(
+            r"Q = x_{\text{norm}} W_Q^T \quad Q \in \mathbb{R}^{B \times L \times n_{heads} \times d_{head}}")
+        st.latex(
+            r"K = x_{\text{norm}} W_K^T \quad K \in \mathbb{R}^{B \times L \times n_{heads} \times d_{head}}")
+        st.latex(
+            r"V = x_{\text{norm}} W_V^T \quad V \in \mathbb{R}^{B \times L \times n_{heads} \times d_{head}}")
+        st.markdown(
+            f"where $W_Q, W_K, W_V \\in \\mathbb{{R}}^{{{n_heads} \\times {d_head} \\times {d_model}}}$")
+
+        if pos_enc == "rope":
+            st.markdown("**Apply RoPE (Rotary Position Embedding):**")
+            st.markdown(
+                "RoPE rotates Q and K vectors BEFORE computing attention scores:")
+            st.latex(
+                r"R_i = \begin{bmatrix} \cos(\theta_d \cdot i) & -\sin(\theta_d \cdot i) \\ \sin(\theta_d \cdot i) & \cos(\theta_d \cdot i) \end{bmatrix}")
+            st.latex(
+                r"Q_{\text{rotated}} = R_i \cdot Q \quad K_{\text{rotated}} = R_j \cdot K")
+            st.markdown("Compute attention scores with rotated vectors:")
+            st.latex(
+                r"\text{attn\_scores} = \frac{Q_{\text{rotated}} K_{\text{rotated}}^T}{\sqrt{d_{head}}}")
+            st.markdown(
+                f"where $\\theta_d = 10000^{{-2d/{d_head}}}$, $\\theta = {rope_theta}$, $d_{{{'head'}}} = {d_head}$")
+            st.markdown(
+                "**Key difference**: RoPE encodes position in the Q and K vectors themselves through rotation.")
+        elif pos_enc == "alibi":
+            st.markdown("**Compute Attention Scores:**")
+            st.latex(r"\text{attn\_scores} = \frac{Q K^T}{\sqrt{d_{head}}}")
+            st.markdown("**Apply ALiBi (Attention with Linear Biases):**")
+            st.markdown(
+                "ALiBi adds position-dependent bias AFTER computing attention scores:")
+            st.latex(r"m_h = 2^{-8h/n_{heads}}")
+            st.latex(r"\text{bias}(i, j) = -m_h \cdot |i - j|")
+            st.latex(
+                r"\text{attn\_scores} = \text{attn\_scores} + \text{bias\_matrix}")
+            st.markdown(
+                f"where $h$ is the head index, $n_{{heads}} = {n_heads}$")
+            st.markdown(
+                "**Key difference**: ALiBi adds position information as a bias term after computing $QK^T$.")
+        else:  # learned or none
+            st.markdown("**Compute Attention Scores:**")
+            st.latex(r"\text{attn\_scores} = \frac{Q K^T}{\sqrt{d_{head}}}")
+            st.markdown(
+                "**Note**: With learned positional embeddings, position information is already in $x_{\\text{norm}}$ (added at the embedding stage), so attention computation is standard.")
+
+        st.markdown("**Causal Masking and Attention Pattern:**")
+        st.latex(
+            r"\text{mask}_{i,j} = \begin{cases} 1 & \text{if } i \geq j \\ 0 & \text{if } i < j \end{cases}")
+        st.latex(
+            r"\text{attn\_scores}_{i,j} = \begin{cases} \text{attn\_scores}_{i,j} & \text{if } i \geq j \\ -\infty & \text{if } i < j \end{cases}")
+        st.latex(
+            r"\text{attn\_pattern} = \text{softmax}(\text{attn\_scores}, \text{dim}=-1)")
+        st.markdown("**Apply to Values and Output Projection:**")
+        st.latex(r"\text{attn\_output} = \text{attn\_pattern} \cdot V")
+        st.latex(r"\text{attn\_output} = \text{attn\_output} \cdot W_O^T")
+        st.markdown("**Residual Connection:**")
+        st.latex(r"x = x + \text{attn\_output}")
+
+        st.markdown("#### 3.2 MLP Sub-block")
+
+        if norm == "layernorm":
+            st.markdown("""
+            **Pre-Normalization (LayerNorm):**
+            ```
+            x_norm = LayerNorm(x)  # Same as above
+            ```
+            """)
+        elif norm == "rmsnorm":
+            st.markdown("""
+            **Pre-Normalization (RMSNorm):**
+            ```
+            x_norm = RMSNorm(x)  # Same as above
+            ```
+            """)
+
+        if activation == "gelu":
+            st.markdown("**MLP with GELU Activation:**")
+            st.latex(
+                r"\text{hidden} = x_{\text{norm}} W_{\text{in}}^T + b_{\text{in}}")
+            st.markdown("GELU activation function:")
+            st.latex(r"\text{GELU}(x) = x \cdot \Phi(x)")
+            st.markdown(
+                "where $\\Phi(x)$ is the CDF of the standard normal distribution. Approximation:")
+            st.latex(
+                r"\text{GELU}(x) \approx 0.5x \cdot \left(1 + \tanh\left(\sqrt{\frac{2}{\pi}} \cdot (x + 0.044715x^3)\right)\right)")
+            st.latex(r"\text{hidden} = \text{GELU}(\text{hidden})")
+            st.latex(
+                r"\text{mlp\_output} = \text{hidden} \cdot W_{\text{out}}^T + b_{\text{out}}")
+            st.latex(r"x = x + \text{mlp\_output}")
+            w_in_dim = f"{d_model} \\times {d_mlp}"
+            w_out_dim = f"{d_mlp} \\times {d_model}"
+            st.markdown(
+                f"where $W_{{\\text{{in}}}} \\in \\mathbb{{R}}^{{{w_in_dim}}}$, $W_{{\\text{{out}}}} \\in \\mathbb{{R}}^{{{w_out_dim}}}$")
+        elif activation == "swiglu":
+            st.markdown("**MLP with SwiGLU Activation:**")
+            st.latex(
+                r"\text{gate} = x_{\text{norm}} W_{\text{gate}}^T + b_{\text{gate}}")
+            st.latex(
+                r"\text{up} = x_{\text{norm}} W_{\text{up}}^T + b_{\text{up}}")
+            st.markdown("SwiGLU activation (SiLU on gate, multiplied by up):")
+            st.latex(
+                r"\text{SiLU}(x) = x \cdot \sigma(x) = x \cdot \frac{1}{1 + e^{-x}}")
+            st.latex(
+                r"\text{hidden} = \text{SiLU}(\text{gate}) \odot \text{up}")
+            st.latex(
+                r"\text{mlp\_output} = \text{hidden} \cdot W_{\text{out}}^T + b_{\text{out}}")
+            st.latex(r"x = x + \text{mlp\_output}")
+            w_gate_dim = f"{d_model} \\times {d_mlp}"
+            w_out_dim = f"{d_mlp} \\times {d_model}"
+            st.markdown(
+                f"where $W_{{\\text{{gate}}}}, W_{{\\text{{up}}}} \\in \\mathbb{{R}}^{{{w_gate_dim}}}$, $W_{{\\text{{out}}}} \\in \\mathbb{{R}}^{{{w_out_dim}}}$")
+
+        st.markdown("---")
+        st.markdown("### 4. Output Projection")
+        if norm == "layernorm":
+            st.latex(r"x_{\text{final}} = \text{LayerNorm}(x)")
+        else:
+            st.latex(r"x_{\text{final}} = \text{RMSNorm}(x)")
+        st.latex(r"\text{logits} = x_{\text{final}} W_{\text{unembed}}^T")
+        st.latex(r"p = \text{softmax}(\text{logits}, \text{dim}=-1)")
+        st.markdown(
+            f"where $W_{{\\text{{unembed}}}} \\in \\mathbb{{R}}^{{V \\times {d_model}}}$, $V$ = vocabulary size")
+
+        st.markdown("---")
+        st.markdown("### 5. Training Loss (Next-Token Prediction)")
+        st.markdown("For each position $i$, predict token at position $i+1$:")
+        st.latex(r"\text{Input: } [t_0, t_1, \ldots, t_{n-1}]")
+        st.latex(r"\text{Target: } [t_1, t_2, \ldots, t_n]")
+        st.markdown("Cross-entropy loss:")
+        st.latex(r"\mathcal{L} = -\log p_{i+1}(t_{i+1} | t_0, \ldots, t_i)")
+        st.markdown("Average over sequence and batch:")
+        st.latex(
+            r"\mathcal{L} = -\frac{1}{B \cdot L} \sum_{b=1}^{B} \sum_{i=1}^{L} \log p_{i+1}^{(b)}(t_{i+1}^{(b)})")
+
+        st.markdown("---")
+        st.markdown("### Summary")
+        st.markdown(f"""
+        **Your Model Configuration:**
+        - **Positional Encoding**: {pos_enc.upper()}
+        - **Normalization**: {norm.upper()}
+        - **Activation**: {activation.upper()}
+        - **Dimensions**: d_model={d_model}, n_heads={n_heads}, d_head={d_head}, d_mlp={d_mlp}
+        """)
+
+
 def parse_timestamp(timestamp_str: str) -> str:
     """Parse YYYYMMDDHHMMSS format to readable datetime string."""
     try:
