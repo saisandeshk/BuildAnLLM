@@ -14,7 +14,10 @@ from pretraining.training.trainer import TransformerTrainer
 from pretraining.data.dataset import TransformerDataset
 from pretraining.model.model import TransformerModelWithEinops, TransformerModelWithoutEinops
 from pretraining.training.training_ui import initialize_training_state, train_model_thread
-from ui_components import render_model_config_ui, render_model_architecture_diagram, render_model_equations, render_model_code_snippets
+from ui_components import (
+    render_model_config_ui, render_model_architecture_diagram, render_model_equations, 
+    render_model_code_snippets, format_elapsed_time, get_elapsed_time, get_total_training_time
+)
 
 
 # Define helper functions first
@@ -103,6 +106,7 @@ def _start_training_workflow(uploaded_file, model_config, tokenizer_type, use_ei
     st.session_state.shared_training_logs.clear()
     st.session_state.training_active = True
     st.session_state.trainer = trainer
+    st.session_state.training_start_time = time.time()
 
     training_active_flag = [True]
     progress_data = {
@@ -143,24 +147,30 @@ def _start_training_workflow(uploaded_file, model_config, tokenizer_type, use_ei
 
 def _handle_training_completion(training_flag_active: bool):
     """Handle training completion logic."""
+    # Record end time
+    if "training_start_time" in st.session_state and "training_end_time" not in st.session_state:
+        st.session_state.training_end_time = time.time()
+    
+    total_time = get_total_training_time()
+    
     if st.session_state.shared_training_logs:
         last_logs = list(st.session_state.shared_training_logs)[-3:]
         last_logs_str = " ".join(last_logs)
         if "Training complete!" in last_logs_str or "Completed all" in last_logs_str:
             st.session_state.training_active = False
-            st.success("✅ Training completed!")
+            st.success(f"✅ Training completed! Total time: {format_elapsed_time(total_time)}")
         elif "Error during training" in last_logs_str:
             st.session_state.training_active = False
             st.error("❌ Training error occurred. Check logs for details.")
         elif "Training stopped by user" in last_logs_str:
             st.session_state.training_active = False
-            st.info("⏹️ Training stopped by user.")
+            st.info(f"⏹️ Training stopped by user. Elapsed time: {format_elapsed_time(total_time)}")
         elif not training_flag_active:
             st.session_state.training_active = False
-            st.success("✅ Training completed!")
+            st.success(f"✅ Training completed! Total time: {format_elapsed_time(total_time)}")
     elif not training_flag_active:
         st.session_state.training_active = False
-        st.success("✅ Training completed!")
+        st.success(f"✅ Training completed! Total time: {format_elapsed_time(total_time)}")
 
 
 def _render_all_losses_graph(all_losses_data):
@@ -235,7 +245,10 @@ def _render_active_training_ui():
         st.progress(
             progress, text=f"Iteration {current_iter} / {st.session_state.trainer.max_iters if st.session_state.trainer else '?'}")
 
-        metric_cols = st.columns(4)
+        # Calculate elapsed time
+        elapsed_time = get_elapsed_time()
+
+        metric_cols = st.columns(5)
         with metric_cols[0]:
             st.metric("Current Loss", f"{current_loss:.4f}")
         with metric_cols[1]:
@@ -245,6 +258,8 @@ def _render_active_training_ui():
                 "Val Loss", f"{val_loss:.4f}" if val_loss is not None else "Pending...")
         with metric_cols[3]:
             st.metric("Progress", f"{progress*100:.1f}%")
+        with metric_cols[4]:
+            st.metric("Elapsed Time", format_elapsed_time(elapsed_time))
 
     # Get loss data (thread-safe)
     with st.session_state.training_lock:
@@ -296,7 +311,12 @@ def _render_active_training_ui():
 def _render_completed_training_ui():
     """Render UI for completed training."""
     if st.session_state.loss_data["iterations"]:
+        # Calculate total elapsed time
+        total_time = get_total_training_time()
+
         st.header("📊 Final Training Results")
+        if total_time > 0:
+            st.info(f"⏱️ Total training time: **{format_elapsed_time(total_time)}**")
         df = pd.DataFrame({
             "Iteration": st.session_state.loss_data["iterations"],
             "Train Loss": st.session_state.loss_data["train_losses"],
@@ -422,6 +442,8 @@ if stop_training and st.session_state.training_active:
     with st.session_state.training_lock:
         if "training_active_flag" in st.session_state:
             st.session_state.training_active_flag[0] = False
+    if "training_start_time" in st.session_state and "training_end_time" not in st.session_state:
+        st.session_state.training_end_time = time.time()
     st.session_state.training_active = False
     st.rerun()
 

@@ -20,7 +20,10 @@ from finetuning.training.sft_trainer import SFTTrainer
 from finetuning.training.finetuning_args import FinetuningArgs
 from finetuning.training.sft_training_ui import train_sft_model_thread
 from pretraining.training.training_ui import initialize_training_state
-from ui_components import render_checkpoint_selector, render_finetuning_equations, render_finetuning_code_snippets
+from ui_components import (
+    render_checkpoint_selector, render_finetuning_equations, render_finetuning_code_snippets,
+    format_elapsed_time, get_elapsed_time, get_total_training_time
+)
 from config import PositionalEncoding
 
 
@@ -281,6 +284,7 @@ def _start_finetuning_workflow(
     st.session_state.shared_training_logs.clear()
     st.session_state.training_active = True
     st.session_state.trainer = trainer
+    st.session_state.training_start_time = time.time()
 
     training_active_flag = [True]
     progress_data = {
@@ -391,7 +395,10 @@ def _render_active_training_ui():
         st.progress(
             progress, text=f"Iteration {current_iter} / {st.session_state.trainer.max_iters if st.session_state.trainer else '?'}")
 
-        metric_cols = st.columns(4)
+        # Calculate elapsed time
+        elapsed_time = get_elapsed_time()
+
+        metric_cols = st.columns(5)
         with metric_cols[0]:
             st.metric("Current Loss", f"{current_loss:.4f}")
         with metric_cols[1]:
@@ -401,6 +408,8 @@ def _render_active_training_ui():
                 "Val Loss", f"{val_loss:.4f}" if val_loss is not None else "Pending...")
         with metric_cols[3]:
             st.metric("Progress", f"{progress*100:.1f}%")
+        with metric_cols[4]:
+            st.metric("Elapsed Time", format_elapsed_time(elapsed_time))
 
     # Get loss data (thread-safe)
     with st.session_state.training_lock:
@@ -460,7 +469,12 @@ def _render_active_training_ui():
 def _render_completed_training_ui():
     """Render UI for completed training."""
     if st.session_state.loss_data["iterations"]:
+        # Calculate total elapsed time
+        total_time = get_total_training_time()
+
         st.header("📊 Final Fine-Tuning Results")
+        if total_time > 0:
+            st.info(f"⏱️ Total fine-tuning time: **{format_elapsed_time(total_time)}**")
         df = pd.DataFrame({
             "Iteration": st.session_state.loss_data["iterations"],
             "Train Loss": st.session_state.loss_data["train_losses"],
@@ -488,24 +502,30 @@ def _render_completed_training_ui():
 
 def _handle_training_completion(training_flag_active: bool):
     """Handle training completion logic."""
+    # Record end time
+    if "training_start_time" in st.session_state and "training_end_time" not in st.session_state:
+        st.session_state.training_end_time = time.time()
+    
+    total_time = get_total_training_time()
+    
     if st.session_state.shared_training_logs:
         last_logs = list(st.session_state.shared_training_logs)[-3:]
         last_logs_str = " ".join(last_logs)
         if "Fine-tuning complete!" in last_logs_str or "Completed all" in last_logs_str:
             st.session_state.training_active = False
-            st.success("✅ Fine-tuning completed!")
+            st.success(f"✅ Fine-tuning completed! Total time: {format_elapsed_time(total_time)}")
         elif "Error during fine-tuning" in last_logs_str:
             st.session_state.training_active = False
             st.error("❌ Fine-tuning error occurred. Check logs for details.")
         elif "Fine-tuning stopped by user" in last_logs_str:
             st.session_state.training_active = False
-            st.info("⏹️ Fine-tuning stopped by user.")
+            st.info(f"⏹️ Fine-tuning stopped by user. Elapsed time: {format_elapsed_time(total_time)}")
         elif not training_flag_active:
             st.session_state.training_active = False
-            st.success("✅ Fine-tuning completed!")
+            st.success(f"✅ Fine-tuning completed! Total time: {format_elapsed_time(total_time)}")
     elif not training_flag_active:
         st.session_state.training_active = False
-        st.success("✅ Fine-tuning completed!")
+        st.success(f"✅ Fine-tuning completed! Total time: {format_elapsed_time(total_time)}")
 
 
 def _display_training_status():
@@ -674,6 +694,8 @@ if stop_training and st.session_state.training_active:
     with st.session_state.training_lock:
         if "training_active_flag" in st.session_state:
             st.session_state.training_active_flag[0] = False
+    if "training_start_time" in st.session_state and "training_end_time" not in st.session_state:
+        st.session_state.training_end_time = time.time()
     st.session_state.training_active = False
     st.rerun()
 
