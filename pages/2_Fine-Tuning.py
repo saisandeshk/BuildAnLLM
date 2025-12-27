@@ -404,9 +404,9 @@ selected_checkpoint = render_checkpoint_selector(
 # CSV upload
 st.header("2. Upload Training Data")
 uploaded_csv = st.file_uploader(
-    "Upload CSV file with 'prompt' and 'response' columns",
+    "Upload CSV file",
     type=["csv"],
-    help="CSV should have two columns: 'prompt' and 'response'. Each row is a training example. If no file is uploaded, the default finetuning.csv will be used."
+    help="CSV should have two columns: 'prompt'/'response' or 'instruction'/'output'. Each row is a training example. You can format your data however you like (including with instruction templates already applied). If no file is uploaded, the default finetuning.csv will be used."
 )
 
 # Use default file if no upload

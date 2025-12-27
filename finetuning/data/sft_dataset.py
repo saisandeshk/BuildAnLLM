@@ -58,11 +58,21 @@ class SFTDataset:
         
         # Load CSV
         df = pd.read_csv(csv_path)
-        if 'prompt' not in df.columns or 'response' not in df.columns:
-            raise ValueError("CSV must have 'prompt' and 'response' columns")
         
-        self.prompts = df['prompt'].tolist()
-        self.responses = df['response'].tolist()
+        # Handle both column name formats: prompt/response or instruction/output
+        # This allows users to use either format, including instruction tuning formats
+        if 'prompt' in df.columns and 'response' in df.columns:
+            self.prompts = df['prompt'].tolist()
+            self.responses = df['response'].tolist()
+        elif 'instruction' in df.columns and 'output' in df.columns:
+            # Support instruction/output format (common in instruction tuning datasets)
+            self.prompts = df['instruction'].tolist()
+            self.responses = df['output'].tolist()
+        else:
+            raise ValueError(
+                "CSV must have either ('prompt', 'response') or ('instruction', 'output') columns. "
+                "You can format your data however you like - including with instruction templates already applied."
+            )
         
         print(f"Loaded {len(self.prompts)} prompt/response pairs")
         
