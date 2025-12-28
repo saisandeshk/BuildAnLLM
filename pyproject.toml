@@ -19,3 +19,29 @@ dependencies = [
     "psutil>=7.2.0",
 ]
 
+[project.optional-dependencies]
+test = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+    "hypothesis>=6.0.0",
+]
+
+[tool.pytest.ini_options]
+markers = [
+    "unit: Unit tests for individual components",
+    "integration: Integration tests for component interactions",
+    "property: Property-based tests for mathematical properties",
+]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+filterwarnings = [
+    # Suppress SentencePiece deprecation warnings from C++ bindings
+    # These are internal library warnings, not actionable for our code
+    "ignore::DeprecationWarning:sentencepiece",
+    "ignore:builtin type.*has no __module__ attribute:DeprecationWarning",
+]
+

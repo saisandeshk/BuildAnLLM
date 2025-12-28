@@ -41,7 +41,7 @@ class ALiBi(nn.Module):
         Returns:
             Distance matrix [seq_len, seq_len] where distance[i, j] = |i - j|
         """
-        positions = torch.arange(seq_len, device=device)  # [seq_len]
+        positions = torch.arange(seq_len, device=device, dtype=torch.float32)  # [seq_len]
         pos_i = positions.unsqueeze(1)  # [seq_len, 1]
         pos_j = positions.unsqueeze(0)  # [1, seq_len]
         return (pos_i - pos_j).abs()  # [seq_len, seq_len]

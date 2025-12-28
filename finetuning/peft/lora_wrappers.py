@@ -13,6 +13,7 @@ Key concepts:
 - LoRA adapters: Small trainable matrices that approximate weight updates
 """
 
+import math
 import torch
 import torch.nn as nn
 import einops
@@ -38,13 +39,13 @@ def create_lora_matrices(weight_shape, rank: int, alpha: float, dropout: float =
         out_dim, in_dim = weight_shape
         lora_A = nn.Parameter(torch.empty(rank, in_dim))
         lora_B = nn.Parameter(torch.zeros(out_dim, rank))
-        nn.init.kaiming_uniform_(lora_A, a=torch.sqrt(torch.tensor(5.0)))
+        nn.init.kaiming_uniform_(lora_A, a=math.sqrt(5.0))
     elif len(weight_shape) == 3:
         # 3D for attention: [n_heads, d_head, d_model]
         n_heads, d_head, d_model = weight_shape
         lora_A = nn.Parameter(torch.empty(n_heads, rank, d_model))
         lora_B = nn.Parameter(torch.zeros(n_heads, d_head, rank))
-        nn.init.kaiming_uniform_(lora_A, a=torch.sqrt(torch.tensor(5.0)))
+        nn.init.kaiming_uniform_(lora_A, a=math.sqrt(5.0))
     else:
         raise ValueError(f"Unsupported weight shape: {weight_shape}")
     

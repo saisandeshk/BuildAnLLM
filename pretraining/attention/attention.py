@@ -220,7 +220,11 @@ class Attention(nn.Module):
         # Note: Cached K, V already have RoPE applied (if using RoPE)
         # Cache shape: [batch, cache_len, n_kv_heads, d_head] (smaller than MHA for GQA/MQA!)
         if cache is not None:
-            k_cache, v_cache = cache
+            # Handle cache format: should be tuple (k_cache, v_cache) or list [k_cache, v_cache]
+            if isinstance(cache, (list, tuple)) and len(cache) == 2:
+                k_cache, v_cache = cache
+            else:
+                raise ValueError(f"Cache must be tuple or list of 2 elements, got {type(cache)} with length {len(cache) if hasattr(cache, '__len__') else 'N/A'}")
             k = torch.cat([k_cache, k], dim=1)  # [batch, cache_len + seq_len, n_kv_heads, d_head]
             v = torch.cat([v_cache, v], dim=1)  # [batch, cache_len + seq_len, n_kv_heads, d_head]
             total_len = k.shape[1]
@@ -243,8 +247,14 @@ class Attention(nn.Module):
         # We cache the original n_kv_heads version to save memory
         # After broadcasting, K/V would be [batch, seq_len, n_heads, d_head]
         # But we only need to cache [batch, seq_len, n_kv_heads, d_head] (smaller!)
-        k_for_cache = k[:, -seq_len:, :, :]  # [batch, seq_len, n_kv_heads, d_head]
-        v_for_cache = v[:, -seq_len:, :, :]  # [batch, seq_len, n_kv_heads, d_head]
+        # If cache was provided, k/v already contains accumulated sequence, so cache the entire thing
+        # Otherwise, cache only the new tokens
+        if cache is not None:
+            k_for_cache = k  # [batch, total_len, n_kv_heads, d_head] - accumulated sequence
+            v_for_cache = v  # [batch, total_len, n_kv_heads, d_head] - accumulated sequence
+        else:
+            k_for_cache = k[:, -seq_len:, :, :]  # [batch, seq_len, n_kv_heads, d_head]
+            v_for_cache = v[:, -seq_len:, :, :]  # [batch, seq_len, n_kv_heads, d_head]
 
         # Step 5: Broadcast K/V to match Q heads for GQA/MQA
         # For MHA: n_kv_heads = n_heads, so no broadcasting needed

@@ -163,7 +163,9 @@ class SFTTrainer:
         Returns:
             Loss value (scalar float)
         """
-        logits = self.model(x_batch)
+        result = self.model(x_batch)
+        # Handle tuple return (logits, cache) - extract just logits
+        logits = result[0] if isinstance(result, tuple) else result
         loss = self._compute_masked_loss(logits, y_batch, masks_batch)
         return loss.item()
 

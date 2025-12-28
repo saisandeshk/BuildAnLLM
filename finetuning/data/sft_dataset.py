@@ -81,7 +81,9 @@ class SFTDataset:
             raise ValueError("CSV file is empty! Please provide at least one prompt/response pair.")
         
         # Validate that responses are not all empty
-        empty_responses = sum(1 for r in self.responses if not str(r).strip())
+        # Handle NaN values from pandas (empty strings may be read as NaN)
+        empty_responses = sum(1 for r in self.responses 
+                              if pd.isna(r) or (isinstance(r, str) and not r.strip()))
         if empty_responses == len(self.responses):
             raise ValueError(
                 "All responses are empty! Please ensure your CSV has non-empty response values. "

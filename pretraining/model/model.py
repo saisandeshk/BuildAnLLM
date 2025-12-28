@@ -50,7 +50,10 @@ def _aggregate_aux_losses(aux_losses: list) -> Optional[Float[Tensor, ""]]:
         Sum of all auxiliary losses, or None if no losses
     """
     if aux_losses:
-        return sum(aux_losses)
+        # Filter out None values before summing
+        valid_losses = [loss for loss in aux_losses if loss is not None]
+        if valid_losses:
+            return sum(valid_losses)
     return None
 
 
@@ -272,8 +275,12 @@ class TransformerModel(nn.Module):
         # logits: [batch, position, d_vocab]
         logits = self.unembed(residual)
 
-        # Step 7: Format output (maintain backward compatibility)
-        return self._format_output(logits, new_cache_list if cache is not None else None, total_aux_loss)
+        # Step 7: Format output
+        # Always return cache if we have blocks (for cache API support)
+        # Callers using old API (model(tokens)) should handle tuple return: logits, _ = model(tokens)
+        # Or use model(tokens)[0] to get just logits
+        cache_to_return = new_cache_list if len(self.blocks) > 0 else None
+        return self._format_output(logits, cache_to_return, total_aux_loss)
 
 
 # Backward compatibility aliases

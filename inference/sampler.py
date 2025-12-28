@@ -312,6 +312,10 @@ class TransformerSampler:
 
         # Decode and return
         generated_tokens = tokens_tensor[0].tolist()
+        # Clamp tokens to tokenizer's vocabulary size to avoid KeyError
+        if hasattr(self.tokenizer, 'vocab_size'):
+            vocab_size = self.tokenizer.vocab_size
+            generated_tokens = [min(t, vocab_size - 1) for t in generated_tokens]
         return self.tokenizer.decode(generated_tokens)
 
     @torch.no_grad()
