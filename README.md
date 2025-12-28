@@ -17,6 +17,12 @@ I'm incredibly grateful to all those from whom I learned and borrowed ideas (see
 
 _(This repository is a work in progress. Comments, corrections, and pull requests are very welcome. Currently, it serves a decoder-only architecture (like GPT, LLaMA, OLMo) and includes Mixture of Experts (MoE) architectures (like DeepSeek-V2 and Mixtral). It does not include encoder-only models (like BERT) or encoder-decoder models (like T5). It includes pre-training and supervised fine-tuning (SFT), but not yet RLHF or other advanced fine-tuning techniques.)_
 
+## Quickstart ##
+
+```bash
+uv run --with streamlit streamlit run main.py
+```
+
 ## What You'll Learn
 
 By exploring the interface and codebase, you'll gain a deep understanding of:
