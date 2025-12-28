@@ -198,14 +198,9 @@ class BPETokenizer:
     """Byte Pair Encoding tokenizer using tiktoken"""
 
     def __init__(self, text: str = "", model_name: str = "gpt2"):
-        try:
-            import tiktoken
-            self.enc = tiktoken.get_encoding(model_name)
-            self.vocab_size = self.enc.n_vocab
-        except ImportError as exc:
-            raise ImportError(
-                "tiktoken not installed. Install with: pip install tiktoken"
-            ) from exc
+        import tiktoken
+        self.enc = tiktoken.get_encoding(model_name)
+        self.vocab_size = self.enc.n_vocab
 
     def encode(self, text: str) -> List[int]:
         """Convert text to list of token IDs"""
