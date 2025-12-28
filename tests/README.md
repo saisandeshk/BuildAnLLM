@@ -2,42 +2,7 @@
 
 Comprehensive pytest test suite covering all functions in the transformer training codebase.
 
-## Structure
-
-```
-tests/
-├── conftest.py                    # Shared fixtures (configs, models, tokenizers, etc.)
-├── unit/                          # Unit tests for individual components
-│   ├── test_tokenizers.py        # Tokenizer classes
-│   ├── test_embeddings.py         # Embedding classes
-│   ├── test_normalization.py     # LayerNorm, RMSNorm
-│   ├── test_positional.py        # PosEmbed, RoPE, ALiBi
-│   ├── test_attention.py          # Attention (MHA, GQA, MQA)
-│   ├── test_mlp.py               # MLP, MLPSwiGLU, MoE
-│   ├── test_transformer_block.py # TransformerBlock
-│   ├── test_model.py             # TransformerModel
-│   ├── test_config.py            # Configuration classes
-│   ├── test_utils.py             # Utility functions
-│   └── test_lora.py              # LoRA utilities
-├── integration/                   # Integration tests
-│   ├── test_dataset.py           # Dataset classes
-│   ├── test_training.py          # Training classes
-│   ├── test_inference.py         # Inference/sampling
-│   ├── test_model_loading.py     # Checkpoint loading
-│   └── test_end_to_end.py        # Full workflows
-└── property/                      # Property-based tests
-    ├── test_attention_properties.py
-    ├── test_normalization_properties.py
-    └── test_model_properties.py
-```
-
 ## Running Tests
-
-### Install Dependencies
-
-```bash
-uv sync --extra test
-```
 
 ### Run All Tests
 
