@@ -1,6 +1,6 @@
 # Build an LLM
 
-<img width="847" height="660" alt="Screenshot 2025-12-24 at 20 57 51" src="https://github.com/user-attachments/assets/2fbb32ac-45bd-4b27-9321-79dc65e14242" />
+<img width="933" height="721" alt="Screenshot 2025-12-27 at 20 16 40" src="https://github.com/user-attachments/assets/6e2f335e-fbc1-4bf4-8fbf-720ad40e62e2" />
 
 This repository contains an educational training workflow for a transformer-based autoregressive, decoder-only language model. It is optimized not for speed or cost, but rather for learning.
 
