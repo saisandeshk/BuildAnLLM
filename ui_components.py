@@ -526,7 +526,7 @@ MODEL_SIZE_PRESETS = {
 
 def apply_model_size_preset(size: str, config: Dict) -> None:
     """Apply model size preset to config.
-    
+
     Note: This function does NOT set n_kv_heads - that should be set by
     architecture presets (which know whether to use MHA, GQA, or MQA).
     """
@@ -536,7 +536,7 @@ def apply_model_size_preset(size: str, config: Dict) -> None:
 
 
 def apply_architecture_preset(preset_name: str, config: Dict) -> None:
-    """Apply architecture preset (GPT, LLaMA, OLMo) to config."""
+    """Apply architecture preset (GPT, LLaMA 4, OLMo 3) to config."""
     if preset_name == "GPT":
         config["positional_encoding"] = "learned"
         config["normalization"] = "layernorm"
@@ -551,16 +551,27 @@ def apply_architecture_preset(preset_name: str, config: Dict) -> None:
         config["activation"] = "swiglu"
         config["tokenizer_type"] = "sentencepiece"
         config["rope_theta"] = 10000.0
-        config["use_moe"] = False
-        # Original LLaMA uses MHA (n_kv_heads = n_heads)
-        config["n_kv_heads"] = config.get("n_heads", 4)
+        # LLaMA 4 uses MoE architecture (first LLaMA to use MoE)
+        # Scout: 16 experts, Maverick: 128 experts (defaulting to Scout)
+        config["use_moe"] = True
+        config["num_experts"] = 16  # Scout configuration (Maverick uses 128)
+        # Each token goes to 1 routed expert + shared expert
+        config["num_experts_per_tok"] = 1
+        config["use_shared_experts"] = True  # LLaMA 4 uses shared experts
+        config["num_shared_experts"] = 1
+        config["router_type"] = "top_k_with_shared"
+        config["load_balancing_loss_weight"] = 0.01
+        config["expert_capacity_factor"] = 1.25
+        # LLaMA 4 likely uses GQA (modern standard, 4:1 ratio similar to Mixtral/Mistral)
+        n_heads = config.get("n_heads", 32)
+        config["n_kv_heads"] = max(1, n_heads // 4)
     elif preset_name == "OLMO":
         config["positional_encoding"] = "alibi"
         config["normalization"] = "layernorm"
         config["activation"] = "swiglu"
         config["tokenizer_type"] = "sentencepiece"
         config["use_moe"] = False
-        # OLMo uses MHA (n_kv_heads = n_heads)
+        # OLMo 3 uses MHA (n_kv_heads = n_heads) - dense model architecture
         config["n_kv_heads"] = config.get("n_heads", 4)
 
 
@@ -689,15 +700,16 @@ def _render_preset_buttons(config: Dict) -> None:
             st.rerun()
 
     with col2:
-        if st.button("🦙 LLaMA", width='stretch'):
+        if st.button("🦙 LLaMA 4", width='stretch'):
             apply_architecture_preset("LLAMA", config)
             apply_model_size_preset(config.get("model_size", "small"), config)
-            # Ensure MHA after size preset (size preset might have changed n_heads)
-            config["n_kv_heads"] = config.get("n_heads", 4)
+            # Re-apply LLaMA 4's GQA setting after size preset
+            n_heads = config.get("n_heads", 4)
+            config["n_kv_heads"] = max(1, n_heads // 4)  # GQA with 4:1 ratio
             st.rerun()
 
     with col3:
-        if st.button("🔬 OLMo", width='stretch'):
+        if st.button("🔬 OLMo 3", width='stretch'):
             apply_architecture_preset("OLMO", config)
             apply_model_size_preset(config.get("model_size", "small"), config)
             # Ensure MHA after size preset (size preset might have changed n_heads)
@@ -999,8 +1011,8 @@ def _get_preset_info() -> str:
     return """
     **Preset Configurations:**
     - **GPT-2**: Learned positional embeddings, LayerNorm, GELU activation, BPE-tiktoken (GPT-2 style)
-    - **LLaMA**: RoPE positional encoding, RMSNorm, SwiGLU activation, SentencePiece tokenizer
-    - **OLMo**: ALiBi positional encoding, LayerNorm, SwiGLU activation, SentencePiece tokenizer
+    - **LLaMA 4**: RoPE positional encoding, RMSNorm, SwiGLU activation, SentencePiece tokenizer, MoE architecture (16 experts, shared expert), GQA attention (4:1 ratio)
+    - **OLMo 3**: ALiBi positional encoding, LayerNorm, SwiGLU activation, SentencePiece tokenizer, dense model (no MoE), MHA attention
     - **DeepSeek V2**: LLaMA-style with MoE (64 experts, top-6, 2 shared experts)
     - **Mixtral**: LLaMA-style with MoE (8 experts, top-2 routing). Sparse MoE architecture with 8 experts per layer, activating 2 experts per token. Based on Mixtral 8x7B design.
 
