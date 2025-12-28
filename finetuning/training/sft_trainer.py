@@ -249,7 +249,9 @@ class SFTTrainer:
 
             # Forward pass
             # logits: [batch_size, seq_len, vocab_size] - model predictions
-            logits = self.model(x_batch)
+            result = self.model(x_batch)
+            # Handle tuple return (logits, cache) - extract just logits
+            logits = result[0] if isinstance(result, tuple) else result
 
             # Compute masked loss (only on response tokens)
             # Key difference from pre-training: we ignore loss on prompt tokens

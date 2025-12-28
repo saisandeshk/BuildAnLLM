@@ -167,6 +167,9 @@ def _start_finetuning_workflow(
                 dropout=lora_dropout,
                 target_modules=lora_target_modules,
             )
+            # Ensure model (including LoRA matrices) is on the correct device
+            # This is important because LoRA matrices might not have been created on the right device
+            model = model.to(device)
             param_counts = count_lora_parameters(model)
             st.success(
                 f"✅ LoRA applied! Training {param_counts['lora']:,} LoRA parameters "

@@ -69,6 +69,7 @@ def train_sft_model_thread(
 
     except Exception as e:
         import traceback
+        import time
         error_msg = f"Error during fine-tuning: {str(e)}"
         traceback_str = traceback.format_exc()
         print(error_msg)
@@ -83,6 +84,9 @@ def train_sft_model_thread(
             shared_logs.append(traceback_str)
             shared_logs.append("=" * 80)
             training_active_flag[0] = False
+            # Set end time for proper timing calculation
+            if "training_end_time" not in progress_data:
+                progress_data["training_end_time"] = time.time()
 
 
 def _log_training_start(trainer, shared_logs, lock, eval_interval):
@@ -121,7 +125,9 @@ def _sft_training_step(trainer, iter_num, first_loss_set):
     y_batch = trainer.Y_train[idx].to(trainer.device)
     masks_batch = trainer.masks_train[idx].to(trainer.device)
 
-    logits = trainer.model(x_batch)
+    result = trainer.model(x_batch)
+    # Handle tuple return (logits, cache) - extract just logits
+    logits = result[0] if isinstance(result, tuple) else result
 
     # Check if there are any response tokens (mask == 1)
     # This check provides better error messages than the clamp in _compute_masked_loss

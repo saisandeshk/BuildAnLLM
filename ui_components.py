@@ -54,15 +54,18 @@ def get_total_training_time() -> float:
     Uses training_end_time if available, otherwise calculates from current time.
 
     Returns:
-        Total time in seconds, or 0.0 if training hasn't started
+        Total time in seconds, or 0.0 if training hasn't started or if time is invalid
     """
     if "training_start_time" not in st.session_state:
         return 0.0
 
     if "training_end_time" in st.session_state:
-        return st.session_state.training_end_time - st.session_state.training_start_time
+        elapsed = st.session_state.training_end_time - st.session_state.training_start_time
     else:
-        return time.time() - st.session_state.training_start_time
+        elapsed = time.time() - st.session_state.training_start_time
+    
+    # Return 0.0 if time is negative or invalid (prevents display of negative times)
+    return max(0.0, elapsed)
 
 
 def render_training_metrics(
@@ -335,28 +338,45 @@ def handle_training_completion(training_flag_active: bool, training_type: str = 
         stopped_msg = "Training stopped by user"
         error_detail = "Training error occurred. Check logs for details."
 
+    # Check for errors first (check all logs, not just last 3)
     if st.session_state.shared_training_logs:
+        all_logs_str = " ".join(st.session_state.shared_training_logs)
+        has_error = error_msg in all_logs_str or "ERROR DETECTED" in all_logs_str
+        
+        if has_error:
+            st.session_state.training_active = False
+            # Set end time for proper timing calculation
+            if "training_start_time" in st.session_state and "training_end_time" not in st.session_state:
+                st.session_state.training_end_time = time.time()
+            st.error(f"❌ {error_detail}")
+            return  # Don't show success message if there's an error
+        
+        # Check for completion messages
         last_logs = list(st.session_state.shared_training_logs)[-3:]
         last_logs_str = " ".join(last_logs)
         if complete_msg in last_logs_str or "Completed all" in last_logs_str:
             st.session_state.training_active = False
             st.success(
                 f"✅ {completed_msg} Total time: {format_elapsed_time(total_time)}")
-        elif error_msg in last_logs_str:
-            st.session_state.training_active = False
-            st.error(f"❌ {error_detail}")
         elif stopped_msg in last_logs_str:
             st.session_state.training_active = False
             st.info(
                 f"⏹️ {stopped_msg}. Elapsed time: {format_elapsed_time(total_time)}")
         elif not training_flag_active:
+            # Only show success if thread finished and no errors detected
             st.session_state.training_active = False
             st.success(
                 f"✅ {completed_msg} Total time: {format_elapsed_time(total_time)}")
     elif not training_flag_active:
+        # Thread finished but no logs - check if there were any errors
+        # If thread died unexpectedly, it's likely an error
         st.session_state.training_active = False
-        st.success(
-            f"✅ {completed_msg} Total time: {format_elapsed_time(total_time)}")
+        # Don't assume success if thread died without logs
+        if st.session_state.training_thread is not None and not st.session_state.training_thread.is_alive():
+            st.warning(f"⚠️ {training_type} thread finished unexpectedly. Check logs for details.")
+        else:
+            st.success(
+                f"✅ {completed_msg} Total time: {format_elapsed_time(total_time)}")
 
 
 def render_active_training_ui(training_type: str = "Training") -> None:

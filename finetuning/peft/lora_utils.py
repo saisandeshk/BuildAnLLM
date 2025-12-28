@@ -76,12 +76,22 @@ def _patch_attention_forward(attn_module):
     # Check if using einops by checking the class name
     use_einops = 'WithEinops' in attn_module.__class__.__name__
     
-    def lora_forward(self, residual):
+    def lora_forward(self, residual, cache=None, start_pos=0):
         """
         Forward pass with LoRA support.
         
         Computes Q, K, V, and output projection with LoRA adapters if enabled.
         Maintains compatibility with RoPE and ALiBi positional encodings.
+        
+        Args:
+            residual: Input tensor [batch, posn, d_model]
+            cache: Optional KV cache tuple (K_cache, V_cache) for efficient inference
+            start_pos: Starting position for RoPE (used with cache)
+        
+        Returns:
+            Tuple of (output, (K_cache, V_cache)) where:
+            - output: [batch, posn, d_model] - attention output
+            - K_cache, V_cache: [batch, new_cache_len, n_kv_heads, d_head] - updated cache
         """
         seq_len = residual.shape[1]
         
@@ -100,7 +110,9 @@ def _patch_attention_forward(attn_module):
                 # Standard einsum (einops works for both einops and non-einops models)
                 return einops.einsum(x, weight, pattern)
         
-        # Q, K, V - use einops pattern for LoRA (works for both versions)
+        # Step 1: Compute Q, K, V projections with LoRA
+        # Note: For GQA/MQA, K/V have n_kv_heads, but we compute with n_heads first
+        # We'll handle broadcasting later
         q = compute_with_lora(
             residual, self.W_Q,
             "batch posn d_model, n_heads d_head d_model -> batch posn n_heads d_head",
@@ -108,64 +120,93 @@ def _patch_attention_forward(attn_module):
         )
         k = compute_with_lora(
             residual, self.W_K,
-            "batch posn d_model, n_heads d_head d_model -> batch posn n_heads d_head",
+            "batch posn d_model, n_kv_heads d_head d_model -> batch posn n_kv_heads d_head",
             "W_K"
         )
         v = compute_with_lora(
             residual, self.W_V,
-            "batch posn d_model, n_heads d_head d_model -> batch posn n_heads d_head",
+            "batch posn d_model, n_kv_heads d_head d_model -> batch posn n_kv_heads d_head",
             "W_V"
         )
         
-        # Apply RoPE if provided
-        if self.rope is not None:
-            positions = torch.arange(seq_len, device=residual.device)
-            q, k = self.rope(q, k, positions)
+        # Step 2: Handle KV cache
+        if cache is not None:
+            if isinstance(cache, (list, tuple)) and len(cache) == 2:
+                k_cache, v_cache = cache
+            else:
+                raise ValueError(f"Cache must be tuple or list of 2 elements, got {type(cache)}")
+            k = torch.cat([k_cache, k], dim=1)  # [batch, cache_len + seq_len, n_kv_heads, d_head]
+            v = torch.cat([v_cache, v], dim=1)  # [batch, cache_len + seq_len, n_kv_heads, d_head]
+            total_len = k.shape[1]
+        else:
+            total_len = seq_len
         
-        # Attention scores - use original method
+        # Step 3: Apply RoPE if provided
+        if self.rope is not None:
+            positions = torch.arange(start_pos, start_pos + seq_len, device=residual.device)
+            q, k_new = self.rope(q, k[:, -seq_len:, :, :], positions)
+            if cache is not None:
+                k = torch.cat([k[:, :-seq_len, :, :], k_new], dim=1)
+            else:
+                k = k_new
+        
+        # Step 4: Store K/V for caching (before broadcasting)
+        if cache is not None:
+            k_for_cache = k  # [batch, total_len, n_kv_heads, d_head]
+            v_for_cache = v  # [batch, total_len, n_kv_heads, d_head]
+        else:
+            k_for_cache = k[:, -seq_len:, :, :]  # [batch, seq_len, n_kv_heads, d_head]
+            v_for_cache = v[:, -seq_len:, :, :]  # [batch, seq_len, n_kv_heads, d_head]
+        
+        # Step 5: Broadcast K/V to match Q heads for GQA/MQA
+        if self.n_kv_heads < self.n_heads:
+            repeat_factor = self.n_heads // self.n_kv_heads
+            k = k.repeat_interleave(repeat_factor, dim=2)  # [batch, posn_k, n_heads, d_head]
+            v = v.repeat_interleave(repeat_factor, dim=2)  # [batch, posn_k, n_heads, d_head]
+        
+        # Step 6: Compute attention scores
         if use_einops:
             attn_scores = einops.einsum(
                 q, k,
                 "batch posn_q n_heads d_head, batch posn_k n_heads d_head -> batch n_heads posn_q posn_k"
             ) / (self.cfg.d_head ** 0.5)
         else:
-            # Non-einops: transpose and use matmul
             q = q.transpose(1, 2)  # [batch, n_heads, posn, d_head]
             k = k.transpose(1, 2)  # [batch, n_heads, posn, d_head]
             attn_scores = torch.matmul(q, k.transpose(-2, -1)) / (self.cfg.d_head ** 0.5)
         
-        # Apply ALiBi if provided
+        # Step 7: Apply ALiBi if provided
         if self.alibi is not None:
-            alibi_bias = self.alibi.get_bias(seq_len, residual.device)
-            attn_scores = attn_scores + alibi_bias.unsqueeze(0)
+            alibi_bias = self.alibi.get_bias(total_len, residual.device)  # [n_heads, total_len, total_len]
+            attn_scores = attn_scores + alibi_bias.unsqueeze(0)[:, :, start_pos:start_pos+seq_len, :]
         
-        # Causal mask
-        mask = torch.tril(torch.ones((seq_len, seq_len), device=residual.device))
+        # Step 8: Apply causal mask
+        mask = torch.tril(torch.ones((seq_len, total_len), device=residual.device))
         attn_scores = attn_scores.masked_fill(mask == 0, float("-inf"))
         
-        # Softmax
+        # Step 9: Softmax
         attn_pattern = torch.softmax(attn_scores, dim=-1)
         
-        # Apply to values
+        # Step 10: Apply to values
         if use_einops:
             attn_output = einops.einsum(
                 attn_pattern, v,
                 "batch n_heads posn_q posn_k, batch posn_k n_heads d_head -> batch posn_q n_heads d_head"
             )
         else:
-            # Non-einops: v needs to be transposed
             v = v.transpose(1, 2)  # [batch, n_heads, posn, d_head]
             attn_output = torch.matmul(attn_pattern, v)  # [batch, n_heads, posn_q, d_head]
             attn_output = attn_output.transpose(1, 2)  # [batch, posn_q, n_heads, d_head]
         
-        # Output projection with LoRA
+        # Step 11: Output projection with LoRA
         output = compute_with_lora(
             attn_output, self.W_O,
             "batch posn n_heads d_head, n_heads d_head d_model -> batch posn d_model",
             "W_O"
         )
         
-        return output
+        # Return cache: use the original (non-broadcasted) K/V to save memory
+        return output, (k_for_cache, v_for_cache)
     
     # Bind the method to the instance
     import types
