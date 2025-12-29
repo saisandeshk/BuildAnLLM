@@ -304,13 +304,40 @@ with st.container():
     if "manual_trainer" not in st.session_state:
         st.session_state.manual_initialized = False
         
+    # Unified Control Logic
+    is_initialized = st.session_state.get("manual_initialized", False)
+    is_auto_stepping = st.session_state.get("auto_stepping", False)
+    
+    # Dynamic Label
+    if not is_initialized:
+        btn_label = "▶️ Start Training"
+        btn_type = "primary"
+    elif is_auto_stepping:
+        btn_label = "⏸️ Pause"
+        btn_type = "secondary"
+    else:
+        btn_label = "▶️ Resume"
+        btn_type = "primary"
+        
+    def toggle_run_state():
+        if st.session_state.get("manual_initialized", False):
+            st.session_state.auto_stepping = not st.session_state.auto_stepping
+
     with col2:
-        # Renamed to "Start Training" and disabled if already running
-        init_manual = st.button("Start Training", type="primary", width='stretch', 
-                              disabled=st.session_state.get("manual_initialized", False))
+        # Unified Button
+        # Logic: If NOT initialized, click -> returns True -> Runs Init Block
+        # If Initialized, click -> Run Callback (toggle) -> Returns True (ignore in init block)
+        unified_btn = st.button(
+            btn_label, 
+            type=btn_type, 
+            width='stretch',
+            on_click=toggle_run_state if is_initialized else None,
+            key="btn_unified_control"
+        )
         
     # Initialization Logic
-    if init_manual:
+    # Verify we need to init (Button clicked AND not initialized)
+    if unified_btn and not is_initialized:
          with st.spinner("Initializing Training State..."):
              # Load text
              if uploaded_file:
@@ -362,30 +389,23 @@ with st.container():
         progress = min(current_step / total_steps, 1.0)
         st.progress(progress, text=f"Training Progress: Batch {current_step} / {total_steps}")
 
-    # Auto-Step Controls
-    with col2:
-         # Toggle auto-stepping
-         if "auto_stepping" not in st.session_state:
-             st.session_state.auto_stepping = False # Default if not set
-             
-         if st.session_state.auto_stepping:
-             if st.button("⏸️ Pause", width='stretch'):
-                 st.session_state.auto_stepping = False
-                 st.rerun()
-         else:
-             if st.button("▶️ Resume Auto-Step", width='stretch', disabled=not st.session_state.get("manual_initialized", False)):
-                 st.session_state.auto_stepping = True
-                 st.rerun()
-                 
+    # Ensure auto_stepping is initialized
+    if "auto_stepping" not in st.session_state:
+        st.session_state.auto_stepping = False
+
+    is_auto_stepping = st.session_state.auto_stepping
+
     with col3:
-         step_btn = st.button("👣 Step (1 Batch)", type="primary", width='stretch', 
-                             disabled=not st.session_state.get("manual_initialized", False))
+         # Step Button (Renamed)
+         step_btn = st.button("👣 Step Through", width='stretch', 
+                             disabled=not st.session_state.get("manual_initialized", False),
+                             key="btn_manual_step")
     
-    # Logic for performing a step (either manual click or auto-step)
+    # Logic for performing a step
     should_step = False
     if step_btn and st.session_state.get("manual_initialized", False):
         should_step = True
-    elif st.session_state.get("auto_stepping", False) and st.session_state.get("manual_initialized", False):
+    elif is_auto_stepping and st.session_state.get("manual_initialized", False):
         should_step = True
         
     if should_step:
