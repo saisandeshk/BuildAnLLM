@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import streamlit as st
-from utils import format_elapsed_time, get_elapsed_time, get_total_training_time, scan_checkpoints
+import torch
+from utils import format_elapsed_time, get_elapsed_time, get_total_training_time, scan_checkpoints, get_device
 
 
 # ============================================================================
@@ -503,6 +504,240 @@ def render_attention_heatmap(attn_map, token_labels, layer_idx, head_idx) -> Non
     )
     fig.update_layout(height=600)  # Auto width
     st.plotly_chart(fig, width='stretch')
+
+
+def render_token_analysis_ui(
+    input_ids,
+    target_ids,
+    tokenizer,
+    model=None,
+    masks=None,
+    sample_idx=0,
+    n_ctx=None
+) -> None:
+    """
+    Render interactive token analysis UI (Input, Target, Logits).
+    Shared between Pre-Training and Fine-Tuning.
+    """
+    import html
+
+    # Ensure tensors
+    if not torch.is_tensor(input_ids):
+        input_ids = torch.tensor(input_ids)
+    if not torch.is_tensor(target_ids):
+        target_ids = torch.tensor(target_ids)
+    if masks is not None and not torch.is_tensor(masks):
+        masks = torch.tensor(masks)
+        
+    input_ids_list = input_ids.tolist()
+    
+    # 1. Generate Weighted/Colored HTML for Tokens
+    
+    # Check if we are in SFT mode (masks present)
+    is_sft = masks is not None
+    
+    colored_html = "" # For Pre-Training (Rainbow)
+    prompt_html = ""  # For SFT
+    response_html = "" # For SFT
+    
+    # Palette of translucent colors for dark mode (Rainbow for Pre-Training)
+    rainbow_palette = [
+        "rgba(255, 107, 107, 0.4)",   # Red
+        "rgba(78, 205, 196, 0.4)",    # Teal
+        "rgba(255, 217, 61, 0.4)",    # Yellow
+        "rgba(167, 139, 250, 0.4)",   # Purple
+        "rgba(255, 159, 26, 0.4)",    # Orange
+        "rgba(69, 170, 242, 0.4)",    # Blue
+    ]
+    
+    # Pre-calculate masks info if available
+    masks_list = masks.tolist() if is_sft else None
+    
+    for i, token_id in enumerate(input_ids_list):
+        # Decode individual token
+        try:
+             token_text = tokenizer.decode([token_id])
+        except:
+             token_text = f"<{token_id}>"
+             
+        # Handle special characters for HTML
+        safe_token = html.escape(token_text)
+        
+        # Determine Color & Style
+        token_html_snippet = ""
+        
+        if is_sft:
+            # SFT Mode: Prompt vs Response
+            # Mask interpretation:
+            # masks[i] == 1 means we compute loss on the prediction generated FROM input[i].
+            # This prediction supervised input[i+1].
+            # So input[i] is part of the Response (Target) ONLY IF it was predicted from the previous token.
+            # i.e., masks[i-1] == 1.
+            
+            if i > 0 and masks_list[i-1] == 1:
+                is_response_token = True
+            else:
+                is_response_token = False
+
+            if is_response_token:
+                bg_color = "rgba(78, 205, 196, 0.4)" # Teal (Target)
+                border = "1px solid #4CAF50" # Green
+                status = "Response"
+                style = f"background-color: {bg_color}; border: {border}; margin: 0 1px; padding: 0 1px;"
+                title_text = f"{status} | ID: {token_id}"
+                response_html += f'<span style="{style}" title="{title_text}">{safe_token}</span>'
+            else:
+                bg_color = "rgba(255, 255, 255, 0.1)" # Grey
+                border = "1px solid #555"
+                status = "Prompt"
+                style = f"background-color: {bg_color}; border: {border}; margin: 0 1px; padding: 0 1px;"
+                title_text = f"{status} | ID: {token_id}"
+                prompt_html += f'<span style="{style}" title="{title_text}">{safe_token}</span>'
+        else:
+            # Pre-Training Mode: Rainbow
+            bg_color = rainbow_palette[i % len(rainbow_palette)]
+            border = "none"
+            title_text = f"ID: {token_id}"
+            style = f"background-color: {bg_color}; border-radius: 2px; padding: 0 1px;"
+            colored_html += f'<span style="{style}" title="{title_text}">{safe_token}</span>'
+
+    # Format Target Display
+    # For SFT, the "Target" is the Response HTML generated above.
+    # For Pre-Training, it's the next token.
+    try:
+        if len(target_ids) > 0:
+            last_token_id = target_ids[-1].item()
+            last_token_text = tokenizer.decode([last_token_id])
+            target_display = f"{last_token_text}"
+        else:
+            target_display = "(No Target)"
+            last_token_id = None
+    except:
+        if len(target_ids) > 0:
+            target_display = f"<{target_ids[-1].item()}>"
+            last_token_id = target_ids[-1].item()
+        else:
+            target_display = "N/A"
+            last_token_id = 0
+
+    # === LOGIT LENS (Pre-Training Only) ===
+    diagnostics = None
+    logits = None
+    
+    # We only compute/show logit lens for Pre-Training (masks is None)
+    # The user explicitly requested to remove continuation prediction for SFT.
+    if model is not None and not is_sft:
+        # Calculate diagnostics
+        with st.spinner("Calculating predictions..."):
+            device = get_device()
+            # Ensure input is [1, seq_len]
+            if input_ids.dim() == 1:
+                sample_tokens = input_ids.unsqueeze(0).to(device)
+            else:
+                sample_tokens = input_ids.to(device)
+            
+            with torch.no_grad():
+                try:
+                    outputs = model(sample_tokens, return_diagnostics=True)
+                    if isinstance(outputs, tuple):
+                        logits = outputs[0]
+                    else:
+                        logits = outputs
+                except Exception as e:
+                    # Fallback
+                    try:
+                        logits = model(sample_tokens)
+                    except Exception as e2:
+                        st.error(f"Error running model: {e2}")
+
+    # Layout: Input (Left) | Target + Analysis (Right)
+    st.markdown(f"##### 📖 Current Batch Sample ({sample_idx + 1})")
+    if n_ctx:
+        st.caption(f"Sequence Length: {len(input_ids)} / {n_ctx} tokens")
+    
+    c1, c2 = st.columns([3, 1])
+    with c1:
+        if is_sft:
+             st.markdown("**Input (Prompt)**")
+             st.markdown(
+                 f'<div style="background-color: #262730; padding: 15px; border-radius: 5px; white-space: pre-wrap; font-family: monospace; font-size: 14px; line-height: 1.8;">{prompt_html}</div>',
+                 unsafe_allow_html=True
+             )
+        else:
+             st.markdown("**Input (Context)**")
+             st.markdown(
+                 f'<div style="background-color: #262730; padding: 15px; border-radius: 5px; white-space: pre-wrap; font-family: monospace; font-size: 14px; line-height: 1.8;">{colored_html}</div>',
+                 unsafe_allow_html=True
+             )
+             
+    with c2:
+        if is_sft:
+            st.markdown("**Target (Response)**")
+            st.markdown(
+                 f'<div style="background-color: #262730; padding: 15px; border-radius: 5px; white-space: pre-wrap; font-family: monospace; font-size: 14px; line-height: 1.8; border: 1px solid #4CAF50;">{response_html}</div>',
+                 unsafe_allow_html=True
+            )
+            # No Logit Lens for SFT
+        else:
+            st.markdown("**Target (Next Token)**")
+            st.markdown(
+                f'<div style="background-color: #262730; padding: 15px; border-radius: 5px; white-space: pre-wrap; font-family: monospace; font-size: 14px; border: 1px solid #4CAF50;">{target_display}</div>',
+                unsafe_allow_html=True
+            )
+        
+            # --- LOGIT LENS UI (Only for Pre-Training) ---
+            # Show predictions for what comes AFTER the displayed sequence
+            if logits is not None and last_token_id is not None:
+                # Get predictions for the last position
+                next_token_logits = logits[0, -1, :]
+                probs = torch.softmax(next_token_logits, dim=-1)
+                
+                # Get Top-5
+                top_k = 5
+                top_probs, top_indices = torch.topk(probs, k=top_k)
+                
+                # Get Actual Target Rank (Only meaningful if we know what continues)
+                target_rank = "N/A"
+                target_prob = 0.0
+                
+                try:
+                    if last_token_id < probs.shape[-1]:
+                        target_prob = probs[last_token_id].item()
+                        target_rank = (probs > target_prob).sum().item() + 1
+                except:
+                    pass
+                
+                st.divider()
+                
+                st.markdown(f"**Actual Rank**: #{target_rank}")
+                st.markdown(f"**Prob**: {target_prob:.2%}")
+                st.caption("Next token predictions:")
+                
+                for i in range(top_k):
+                    idx = top_indices[i].item()
+                    prob = top_probs[i].item()
+                    try:
+                        p_token_text = tokenizer.decode([idx])
+                    except:
+                        p_token_text = f"<{idx}>"
+                        
+                    safe_p_token = html.escape(f"'{p_token_text}'")
+                    
+                    bar_color = "#4CAF50" if idx == last_token_id else "#262730"
+                    st.markdown(
+                        f"""
+                        <div style="font-size: 12px; margin-bottom: 4px;">
+                            <div style="display: flex; justify-content: space-between;">
+                                <code>{safe_p_token}</code>
+                                <span>{prob:.2%}</span>
+                            </div>
+                            <div style="background-color: #444; height: 4px; border-radius: 2px; width: 100%;">
+                                <div style="background-color: {bar_color}; width: {prob*100}%; height: 100%; border-radius: 2px;"></div>
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
 
 
 # ============================================================================

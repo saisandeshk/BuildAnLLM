@@ -528,64 +528,35 @@ with st.container():
             target_ids = metrics["targets"][sample_idx]
             masks = metrics["masks"][sample_idx]
             
-            # Decode with color highlighting for Prompt vs Response (based on mask)
-            # Mask = 0 -> Prompt (ignore loss)
-            # Mask = 1 -> Response (compute loss)
-            # Mask = 0 (after response) -> Padding (ignore loss)
-            
-            tokens_html = ""
-            import html
-            tokenizer = st.session_state.sft_tokenizer
-            
             # Identify effective sequence length (Prompt + Response, ignoring Padding)
+            # This logic was used to hide padding in the text view
             try:
                 # Find last index where mask is 1 (end of response)
+                # Note: masks is boolean-like (1 for response, 0 for prompt/padding)
+                # But typically prompt is 0, response is 1, padding is 0.
+                # So we want the LAST 1.
                 last_response_idx = (masks == 1).nonzero(as_tuple=True)[0][-1].item()
                 effective_len = last_response_idx + 1
             except IndexError:
                 # Fallback
                 last_response_idx = len(masks) - 1
                 effective_len = len(masks)
-            
-            # 1. Text Sample: Truncated for cleanliness
-            input_ids_view = input_ids[:effective_len]
-            masks_view = masks[:effective_len]
-            
-            for i, tid in enumerate(input_ids_view.tolist()):
-                is_response = masks_view[i].item() == 1
-                
-                if is_response:
-                    bg_color = "rgba(78, 205, 196, 0.4)" # Teal
-                    border = "1px solid #4CAF50"
-                    status = "Response"
-                else: # Prompt
-                    bg_color = "rgba(255, 255, 255, 0.1)" # Grey
-                    border = "1px solid #555"
-                    status = "Prompt"
-                
-                token_text = tokenizer.decode([tid])
-                safe_token = html.escape(token_text)
-                
-                tokens_html += f'<span style="background-color: {bg_color}; border: {border}; margin: 0 1px; padding: 0 2px;" title="{status} | ID: {tid}">{safe_token}</span>'
-                
-            st.markdown(
-                f'<div style="background-color: #262730; padding: 15px; border-radius: 5px; line-height: 1.8; font-family: monospace;">{tokens_html}</div>', 
-                unsafe_allow_html=True
-            )
-            st.caption("Teal = Response (Target), Grey = Prompt. Padding hidden in text view.")
-            
-            # 2. Labels for Heatmap: Full sequence with <PAD>
-            token_labels = []
-            for i, tid in enumerate(input_ids.tolist()):
-                if i > last_response_idx:
-                    token_labels.append("'<PAD>'")
-                else:
-                    try:
-                        decoded = tokenizer.decode([tid])
-                        token_labels.append(f"'{decoded}'")
-                    except:
-                        token_labels.append(f"T{tid}")
 
+            # Unified Component with truncated view (hiding padding)
+            from ui_components import render_token_analysis_ui
+            
+            # Pass truncated tensors so padding doesn't show up in the text/target view
+            # This makes it cleaner as requested
+            render_token_analysis_ui(
+                input_ids=input_ids[:effective_len],
+                target_ids=target_ids[:effective_len],
+                tokenizer=st.session_state.sft_tokenizer,
+                model=st.session_state.sft_trainer.model,
+                masks=masks[:effective_len],
+                sample_idx=sample_idx,
+                n_ctx=None
+            )
+            
             # Attention Heatmap
             st.divider()
             with st.expander("🔥 Attention Heatmaps", expanded=True):
@@ -596,6 +567,22 @@ with st.container():
                  with col_h:
                      head_idx = st.slider("Head", 0, cfg.n_heads - 1, 0, key=f"sft_attn_h_{current_step}")
                  
+                 # Recalculate diagnostics for heatmap (using FULL sequence to see padding effects if desired, 
+                 # or we could use effective_len. The original code used full sequence. I'll stick to full.)
+                 
+                 # Labels for Heatmap: Full sequence
+                 tokenizer = st.session_state.sft_tokenizer
+                 token_labels = []
+                 for i, tid in enumerate(input_ids.tolist()): # Full input_ids
+                     if i > last_response_idx:
+                         token_labels.append("'<PAD>'")
+                     else:
+                         try:
+                             decoded = tokenizer.decode([tid])
+                             token_labels.append(f"'{decoded}'")
+                         except:
+                             token_labels.append(f"T{tid}")
+
                  # Compute diagnostics
                  with st.spinner("Calculating attention..."):
                      # Pass full padded sequence to model

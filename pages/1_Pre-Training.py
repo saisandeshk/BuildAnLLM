@@ -507,124 +507,32 @@ with st.container():
              input_ids = metrics["inputs"][sample_idx]
              target_ids = metrics["targets"][sample_idx]
              
-             input_ids_list = input_ids.tolist()
+             # Unified component for Text & Logits
+             from ui_components import render_token_analysis_ui
+             render_token_analysis_ui(
+                 input_ids=input_ids,
+                 target_ids=target_ids,
+                 tokenizer=st.session_state.manual_tokenizer,
+                 model=st.session_state.manual_trainer.model,
+                 sample_idx=sample_idx,
+                 n_ctx=n_ctx
+             )
+            
+             # Recalculate diagnostics for Heatmap (since shared component only does logits internally if needed)
+             # OR better: The shared component re-runs the model for logits. 
+             # If we want to share the diagnostics, the component should return them or we re-run.
+             # Efficiency: The component runs forward pass for logits. If we want heatmap, we need diagnostics.
+             # My component implementation does NOT return diagnostics. 
+             # Implication: We might run the model twice. Given this is interactive UI (one sample), it's acceptable.
              
-             # Generate Colored Tokens HTML
-             colored_html = ""
-             # Palette of translucent colors for dark mode
-             color_palette = [
-                 "rgba(255, 107, 107, 0.4)",   # Red
-                 "rgba(78, 205, 196, 0.4)",    # Teal
-                 "rgba(255, 217, 61, 0.4)",    # Yellow
-                 "rgba(167, 139, 250, 0.4)",   # Purple
-                 "rgba(255, 159, 26, 0.4)",    # Orange
-                 "rgba(69, 170, 242, 0.4)",    # Blue
-             ]
-             
-             import html
-             
-             for i, token_id in enumerate(input_ids_list):
-                 # Decode individual token
-                 token_text = st.session_state.manual_tokenizer.decode([token_id])
-                 # Handle special characters for HTML
-                 safe_token = html.escape(token_text)
-                 # Choose color
-                 color = color_palette[i % len(color_palette)]
-                 
-                 # Wrap in span. Use a title attribute to show the Token ID on hover!
-                 colored_html += f'<span style="background-color: {color}; border-radius: 2px; padding: 0 1px;" title="ID: {token_id}">{safe_token}</span>'
-             
-             # Format Target: Just show the LAST token (the "next" token for the full sequence)
-             last_token_id = target_ids[-1].item()
-             last_token_text = st.session_state.manual_tokenizer.decode([last_token_id])
-             target_display = f"{last_token_text}"
-             
-             # === ATTENTION HEATMAPS & LOGIT LENS ===
-             # Calculate diagnostics FIRST so we can use them in the UI below
+             # Re-run for diagnostics for heatmap
              diagnostics = None
-             logits = None
-             
-             with st.spinner("Calculating attention patterns..."):
-                 # We need to run a forward pass on this specific sample to get diagnostics
-                 # input_ids is [seq_len], need to unsqueeze to [1, seq_len]
-                 sample_tokens = input_ids.unsqueeze(0).to(get_device())
-                 
-                 # Use the manual trainer's model
+             with torch.no_grad():
                  model = st.session_state.manual_trainer.model
-                 
-                 with torch.no_grad():
-                     outputs = model(sample_tokens, return_diagnostics=True)
-                     # outputs structure depends on model config, but logits is always first
-                     if isinstance(outputs, tuple):
-                         logits = outputs[0]
-                         diagnostics = outputs[-1]
-                     else:
-                         # Should normally be a tuple if diagnostics requested, but handle edge case
-                         logits = outputs
-                         diagnostics = None
-             
-             st.markdown(f"##### 📖 Current Batch Sample ({sample_idx + 1} of {current_bs})")
-             st.caption(f"Sequence Length: {n_ctx} tokens (defined by n_ctx)")
-             
-             c1, c2 = st.columns([3, 1])
-             with c1:
-                 st.markdown("**Input (Context)**")
-                 st.markdown(
-                     f'<div style="background-color: #262730; padding: 15px; border-radius: 5px; white-space: pre-wrap; font-family: monospace; font-size: 14px; line-height: 1.8;">{colored_html}</div>',
-                     unsafe_allow_html=True
-                 )
-             with c2:
-                 st.markdown("**Target (Next Token)**")
-                 st.markdown(
-                     f'<div style="background-color: #262730; padding: 15px; border-radius: 5px; white-space: pre-wrap; font-family: monospace; font-size: 14px; border: 1px solid #4CAF50;">{target_display}</div>',
-                     unsafe_allow_html=True
-                 )
-                 
-                 # --- LOGIT LENS UI ---
-                 if logits is not None:
-                     # Get predictions for the last position
-                     next_token_logits = logits[0, -1, :]
-                     probs = torch.softmax(next_token_logits, dim=-1)
-                     
-                     # Get Top-5
-                     top_k = 5
-                     top_probs, top_indices = torch.topk(probs, k=top_k)
-                     
-                     # Get Actual Target Rank
-                     target_id = last_token_id
-                     target_prob = probs[target_id].item()
-                     target_rank = (probs > target_prob).sum().item() + 1
-                     
-                     st.divider()
-                     # Display Rank and Prob ABOVE the explanation
-                     st.markdown(f"**Actual Rank**: #{target_rank}")
-                     st.markdown(f"**Prob**: {target_prob:.2%}")
-
-                 st.caption("The model predicts the next token at every position. Here we show the final target token.")
-                 
-                 if logits is not None:
-                     st.markdown("**Top 5 Predictions:**")
-                     for i in range(top_k):
-                         idx = top_indices[i].item()
-                         prob = top_probs[i].item()
-                         token_text = st.session_state.manual_tokenizer.decode([idx])
-                         safe_token = html.escape(f"'{token_text}'")
-                         
-                         bar_color = "#4CAF50" if idx == target_id else "#262730"
-                         st.markdown(
-                             f"""
-                             <div style="font-size: 12px; margin-bottom: 4px;">
-                                 <div style="display: flex; justify-content: space-between;">
-                                     <code>{safe_token}</code>
-                                     <span>{prob:.2%}</span>
-                                 </div>
-                                 <div style="background-color: #444; height: 4px; border-radius: 2px; width: 100%;">
-                                     <div style="background-color: {bar_color}; width: {prob*100}%; height: 100%; border-radius: 2px;"></div>
-                                 </div>
-                             </div>
-                             """,
-                             unsafe_allow_html=True
-                         )
+                 sample_tokens = input_ids.unsqueeze(0).to(get_device())
+                 outputs = model(sample_tokens, return_diagnostics=True)
+                 if isinstance(outputs, tuple):
+                     diagnostics = outputs[-1]
 
              # === ATTENTION HEATMAPS (Full Width) ===
              if diagnostics and "attention_patterns" in diagnostics:
@@ -644,6 +552,7 @@ with st.container():
                  attn_map = diagnostics["attention_patterns"][layer_idx][0, head_idx].cpu().numpy()
                  
                  # Labels
+                 input_ids_list = input_ids.tolist()
                  token_labels = []
                  for tid in input_ids_list:
                      try:
