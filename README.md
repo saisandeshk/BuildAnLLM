@@ -6,7 +6,7 @@ This repository contains an educational training workflow for a transformer-base
 
 Users can:
 
-- **Pre-train an LLM from scratch** using a simple, intuitive interface, with a diagram that visualizes the user's specific configuration.
+- **Pre-train an LLM from scratch** using a simple, intuitive interface, with a diagram that visualizes the user's specific configuration, as well as attention heatmaps.
 - **Fine-tune a pre-trained model** on prompt/response pairs using supervised fine-tuning (SFT), with support for both full-parameter and parameter-efficient fine-tuning via LoRA.
 - **Explore the code** to understand the modularized building blocks of transformer models, with multiple implementation variants for each component. The code shown dynamically adapts to configuration choices.
 - **Work through equations** to understand the math behind the code, with equations dynamically displayed based on configuration.
@@ -93,6 +93,7 @@ The app will open in your browser with the following pages:
    - **Glass Box Training**: Watch the model learn step-by-step.
    - **Colored Tokens**: See exactly how the tokenizer splits your input text with color-coded tokens (hover for IDs).
    - **Real-time Controls**: **Start/Pause/Resume** and ⏭️ **Step to Next Batch** buttons for manual stepping.
+   - **Attention Heatmaps**: Visualize how the model attends to different tokens in the sequence (visible when paused).
    - **Live Metrics**: Monitor Loss, Gradient Norms, and Validation performance in real-time.
 
 #### Command-line
@@ -188,7 +189,21 @@ At each position, the model predicts what comes next. This is how language model
 - After softmax, these become 0 probability
 - The model can't attend to future tokens
 
-### 3. Residual Connections
+### 3. Attention Mechanisms & Heatmaps
+
+**What it is**: The core mechanism that allows the model to "look back" at previous tokens to inform the current prediction.
+
+**The Intuition**:
+Imagine reading a sentence. When you see the word "bank", you need to know if the context is "river" or "money" to understand it. Attention allows the model to look back at words like "river" or "money" earlier in the sentence to disambiguate "bank".
+
+**Heatmap Visualization**:
+In the Glass Box view (Pre-Training and Inference), you can see this process happening via **Attention Heatmaps**:
+- **X-axis (Key)**: The tokens the model is looking *at* (source).
+- **Y-axis (Query)**: The token the model is currently *generating* (destination).
+- **Color Intensity**: Darker/Brighter colors indicate stronger focus.
+- **Diagonal Pattern**: A strong diagonal line means the model is mostly looking at the immediate previous token (common in early layers).
+
+### 4. Residual Connections
 
 **What it is**: Adding input to output: `output = input + transformation(input)`
 
@@ -197,7 +212,7 @@ At each position, the model predicts what comes next. This is how language model
 - Enables training of very deep networks
 - The model can learn the identity function if the transformation isn't needed
 
-### 4. Layer Normalization
+### 5. Layer Normalization
 
 **What it is**: Normalizing activations across the feature dimension.
 
@@ -210,7 +225,7 @@ At each position, the model predicts what comes next. This is how language model
 - **LayerNorm** (GPT/OLMo): Normalizes by subtracting mean, then scaling
 - **RMSNorm** (LLaMA): Only scales (no mean subtraction, no bias)
 
-### 5. Positional Encoding
+### 6. Positional Encoding
 
 **The Problem**: Transformers have no inherent notion of sequence order.
 
@@ -219,7 +234,7 @@ At each position, the model predicts what comes next. This is how language model
 - **RoPE** (LLaMA): Rotates query/key vectors by position-dependent angles
 - **ALiBi** (OLMo): Adds distance-based bias to attention scores
 
-### 6. Pre-training vs Fine-tuning
+### 7. Pre-training vs Fine-tuning
 
 **Pre-training**:
 - Train on large, diverse text corpus
