@@ -383,14 +383,15 @@ with st.container():
          st.session_state.last_manual_metrics = metrics # Store for display
          
          # Print to CLI (tqdm style)
-         print(f"Iter {len(st.session_state.manual_logs)}: loss {metrics['loss']:.4f}, time {format_elapsed_time(time.time() - st.session_state.training_start_time)}")
+         print(f"Iter {len(st.session_state.manual_logs)}: loss {metrics['loss']:.4f}, time {format_elapsed_time(time.time() - st.session_state.training_start_time)}", flush=True)
          
          # Run Evaluation if needed
          trainer = st.session_state.manual_trainer
          curr_iter = len(st.session_state.manual_logs)
          if curr_iter % trainer.eval_interval == 0:
-             val_loss, _ = trainer.estimate_loss()
-             print(f"EVAL: step {curr_iter}, val_loss {val_loss:.4f}")
+             losses = trainer.estimate_loss()
+             val_loss = losses["val"]
+             print(f"EVAL: step {curr_iter}, val_loss {val_loss:.4f}", flush=True)
              
              # Store for graph
              st.session_state.shared_loss_data["iterations"].append(curr_iter)

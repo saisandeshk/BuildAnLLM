@@ -43,7 +43,7 @@ class TransformerTrainer:
         self.max_iters = args.epochs * args.max_steps_per_epoch
 
         # Track running average of loss
-        self.running_loss = 0.0
+        self.running_loss = None  # Initialize to None to avoid zero-bias
         self.loss_alpha = 0.99  # Exponential moving average
 
         # Track losses for plotting
@@ -191,10 +191,13 @@ class TransformerTrainer:
             loss = self._training_step(x_batch, y_batch)
 
             # Update running loss
-            self.running_loss = (
-                self.loss_alpha * self.running_loss
-                + (1 - self.loss_alpha) * loss.item()
-            )
+            if self.running_loss is None:
+                self.running_loss = loss.item()
+            else:
+                self.running_loss = (
+                    self.loss_alpha * self.running_loss
+                    + (1 - self.loss_alpha) * loss.item()
+                )
 
             # Update progress bar with current loss
             pbar.set_postfix(
@@ -291,10 +294,13 @@ class TransformerTrainer:
         self.optimizer.step()
         
         # Update running loss
-        self.running_loss = (
-            self.loss_alpha * self.running_loss
-            + (1 - self.loss_alpha) * loss.item()
-        )
+        if self.running_loss is None:
+            self.running_loss = loss.item()
+        else:
+            self.running_loss = (
+                self.loss_alpha * self.running_loss
+                + (1 - self.loss_alpha) * loss.item()
+            )
         
         return {
             "loss": loss.item(),
