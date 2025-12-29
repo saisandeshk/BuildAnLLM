@@ -8,6 +8,7 @@ from pretraining.tokenization.tokenizer import (
     SimpleBPETokenizer,
 )
 from pretraining.model.model import TransformerModel
+from pretraining.model.model_loader import load_model_from_checkpoint
 from inference.sampler import TransformerSampler
 from utils import get_device
 import os
@@ -26,6 +27,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 st.title("🎯 Inference")
 
+# Initialize session state for current model
+if "current_model" not in st.session_state:
+    st.session_state.current_model = None
+if "current_tokenizer" not in st.session_state:
+    st.session_state.current_tokenizer = None
+
 # Checkpoint selection
 selected_checkpoint = render_checkpoint_selector(
     header="1. Select Model Checkpoint",
@@ -41,7 +48,7 @@ if load_model or st.session_state.current_model is not None:
     if load_model:
         with st.spinner("Loading model..."):
             device = get_device()
-            model, cfg, checkpoint = st.session_state.load_model_from_checkpoint(
+            model, cfg, checkpoint = load_model_from_checkpoint(
                 selected_checkpoint["path"], device
             )
 

@@ -13,7 +13,8 @@ from pretraining.training.trainer import TransformerTrainer
 from pretraining.data.dataset import TransformerDataset
 from pretraining.model.model import TransformerModel
 from pretraining.training.training_ui import initialize_training_state, train_model_thread
-from utils import get_device
+from utils import get_device, format_elapsed_time
+
 from ui_components import (
     render_model_config_ui, render_model_architecture_diagram, render_model_equations,
     render_model_code_snippets, format_elapsed_time, get_total_training_time,
@@ -321,9 +322,15 @@ with st.container():
              device = get_device()
              model = TransformerModel(cfg, use_einops=use_einops).to(device)
              
+             # Create timestamped checkpoint directory
+             timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+             save_dir = os.path.join("checkpoints", timestamp)
+             os.makedirs(save_dir, exist_ok=True)
+             
              training_args = TransformerTrainingArgs(
                  batch_size=batch_size, epochs=epochs, max_steps_per_epoch=max_steps_per_epoch,
-                 lr=learning_rate, weight_decay=weight_decay, eval_iters=10
+                 lr=learning_rate, weight_decay=weight_decay, eval_iters=10,
+                 save_dir=save_dir, save_interval=save_interval
              )
              
              st.session_state.manual_trainer = TransformerTrainer(
@@ -378,25 +385,48 @@ with st.container():
         should_step = True
         
     if should_step:
-         metrics = st.session_state.manual_trainer.train_single_step()
-         st.session_state.manual_logs.append(metrics)
-         st.session_state.last_manual_metrics = metrics # Store for display
+         # Check if we are already done
+         current_len = len(st.session_state.manual_logs)
+         max_len = st.session_state.manual_trainer.max_iters
          
-         # Print to CLI (tqdm style)
-         print(f"Iter {len(st.session_state.manual_logs)}: loss {metrics['loss']:.4f}, time {format_elapsed_time(time.time() - st.session_state.training_start_time)}", flush=True)
-         
-         # Run Evaluation if needed
-         trainer = st.session_state.manual_trainer
-         curr_iter = len(st.session_state.manual_logs)
-         if curr_iter % trainer.eval_interval == 0:
-             losses = trainer.estimate_loss()
-             val_loss = losses["val"]
-             print(f"EVAL: step {curr_iter}, val_loss {val_loss:.4f}", flush=True)
+         if current_len >= max_len:
+             st.session_state.auto_stepping = False
              
-             # Store for graph
-             st.session_state.shared_loss_data["iterations"].append(curr_iter)
-             st.session_state.shared_loss_data["train_losses"].append(metrics["loss"]) # approximate with current batch
-             st.session_state.shared_loss_data["val_losses"].append(val_loss)
+             # Save Final Checkpoint if not already done (naive check)
+             # We can just force save.
+             trainer = st.session_state.manual_trainer
+             if hasattr(trainer.args, "save_dir"):
+                 trainer.save_checkpoint(max_len, is_final=True)
+                 trainer.save_loss_graph()
+                 print(f"CHECKPOINT: Final model saved at iter {max_len}", flush=True)
+                 
+             st.success("Training Complete! Model saved.")
+             # Do not step
+         else:
+             metrics = st.session_state.manual_trainer.train_single_step()
+             st.session_state.manual_logs.append(metrics)
+             st.session_state.last_manual_metrics = metrics # Store for display
+             
+             # Print to CLI (tqdm style)
+             print(f"Iter {len(st.session_state.manual_logs)}: loss {metrics['loss']:.4f}, time {format_elapsed_time(time.time() - st.session_state.training_start_time)}", flush=True)
+             
+             # Run Evaluation if needed
+             trainer = st.session_state.manual_trainer
+             curr_iter = len(st.session_state.manual_logs)
+             if curr_iter % trainer.eval_interval == 0:
+                 losses = trainer.estimate_loss()
+                 val_loss = losses["val"]
+                 print(f"EVAL: step {curr_iter}, val_loss {val_loss:.4f}", flush=True)
+                 
+                 # Store for graph
+                 st.session_state.shared_loss_data["iterations"].append(curr_iter)
+                 st.session_state.shared_loss_data["train_losses"].append(metrics["loss"]) # approximate with current batch
+                 st.session_state.shared_loss_data["val_losses"].append(val_loss)
+             
+             # Save Checkpoint if needed
+             if hasattr(trainer.args, "save_interval") and curr_iter % trainer.args.save_interval == 0:
+                 trainer.save_checkpoint(curr_iter)
+                 print(f"CHECKPOINT: Saved at iter {curr_iter}", flush=True)
 
     # Display Metrics & Text (from last step)
     if "last_manual_metrics" in st.session_state:

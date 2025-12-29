@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import streamlit as st
+from utils import format_elapsed_time, get_elapsed_time, get_total_training_time, scan_checkpoints
 
 
 # ============================================================================
@@ -15,57 +16,8 @@ import streamlit as st
 # ============================================================================
 
 
-def format_elapsed_time(seconds: float) -> str:
-    """Format elapsed time in a human-readable format.
+# Time functions moved to utils.py
 
-    Args:
-        seconds: Elapsed time in seconds
-
-    Returns:
-        Formatted string (e.g., "45.2s", "5m 30s", "2h 15m 30s")
-    """
-    if seconds < 60:
-        return f"{seconds:.1f}s"
-    elif seconds < 3600:
-        minutes = int(seconds // 60)
-        secs = int(seconds % 60)
-        return f"{minutes}m {secs}s"
-    else:
-        hours = int(seconds // 3600)
-        minutes = int((seconds % 3600) // 60)
-        secs = int(seconds % 60)
-        return f"{hours}h {minutes}m {secs}s"
-
-
-def get_elapsed_time() -> float:
-    """Get current elapsed training time from session state.
-
-    Returns:
-        Elapsed time in seconds, or 0.0 if training hasn't started
-    """
-    if "training_start_time" in st.session_state:
-        return time.time() - st.session_state.training_start_time
-    return 0.0
-
-
-def get_total_training_time() -> float:
-    """Get total training time from session state.
-
-    Uses training_end_time if available, otherwise calculates from current time.
-
-    Returns:
-        Total time in seconds, or 0.0 if training hasn't started or if time is invalid
-    """
-    if "training_start_time" not in st.session_state:
-        return 0.0
-
-    if "training_end_time" in st.session_state:
-        elapsed = st.session_state.training_end_time - st.session_state.training_start_time
-    else:
-        elapsed = time.time() - st.session_state.training_start_time
-    
-    # Return 0.0 if time is negative or invalid (prevents display of negative times)
-    return max(0.0, elapsed)
 
 
 def render_training_metrics(
@@ -2363,7 +2315,7 @@ def render_checkpoint_selector(
         Selected checkpoint dict or None if no checkpoint selected
     """
     st.header(header)
-    checkpoints = st.session_state.scan_checkpoints()
+    checkpoints = scan_checkpoints()
 
     if not checkpoints:
         msg = no_checkpoints_message or "No checkpoints found. Please train a model first."

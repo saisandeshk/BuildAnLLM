@@ -88,8 +88,12 @@ The app will open in your browser with the following pages:
    - **🎯 Mixtral**: LLaMA-style with MoE (8 experts, top-2 routing). Sparse MoE architecture matching Mixtral 8x7B design
 3. Configure model dimensions (or use size presets: small, medium, full)
 4. Optionally enable MoE (Mixture of Experts) and configure expert settings
-4. Set training hyperparameters (batch size, learning rate, epochs, etc.)
-5. Click "Start Training" to begin
+5. Set training hyperparameters (batch size, learning rate, epochs, etc.)
+6. Click **"Start/Reset Training"** to enter the **Interactive Training Mode**:
+   - **Glass Box Training**: Watch the model learn step-by-step.
+   - **Colored Tokens**: See exactly how the tokenizer splits your input text with color-coded tokens (hover for IDs).
+   - **Real-time Controls**: ⏸️ Pause, 👣 Step manually (one batch at a time), or ▶️ Auto-Step.
+   - **Live Metrics**: Monitor Loss, Gradient Norms, and Validation performance in real-time.
 
 #### Command-line
 
@@ -135,6 +139,10 @@ uv run cli/train.py --no_einops
 2. Enter a prompt
 3. Configure sampling parameters (temperature, top-k, top-p)
 4. Click "Generate" to create text
+5. **Glass Box Internals**: Scroll down to inspect the model's internal state during generation:
+   - **Attention Maps**: Visualize where the model is looking.
+   - **Logit Lens**: See what the model "thinks" the next token is after every layer.
+   - **Layer Norms**: Track signal propagation through the network.
 
 #### Command-line
 
