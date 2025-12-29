@@ -1,6 +1,6 @@
 """Inference page for generating text from trained models."""
 
-from ui_components import render_checkpoint_selector, render_inference_equations, render_inference_code_snippets
+from ui_components import render_checkpoint_selector, render_inference_equations, render_inference_code_snippets, render_attention_heatmap
 from pretraining.tokenization.tokenizer import (
     BPETokenizer,
     CharacterTokenizer,
@@ -306,17 +306,9 @@ if load_model or st.session_state.current_model is not None:
                         except:
                             token_labels.append(f"T{tid}")
                             
-                    # Create Heatmap
-                    fig = px.imshow(
-                        attn_map,
-                        x=token_labels,
-                        y=token_labels,
-                        labels=dict(x="Key (Source)", y="Query (Destination)", color="Attention"),
-                        title=f"Layer {layer_idx} Head {head_idx} Attention",
-                        color_continuous_scale="Viridis" # Standard readable heatmap
-                    )
-                    fig.update_layout(height=600, width=800)
-                    st.plotly_chart(fig, use_container_width=True)
+                    
+                    # Use shared component (incorporates fix for character-level tokenization)
+                    render_attention_heatmap(attn_map, token_labels, layer_idx, head_idx)
                     
                 # Tab 2: Logit Lens
                 with internals_tabs[1]:

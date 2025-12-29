@@ -463,6 +463,48 @@ def display_training_status(training_type: str = "Training") -> None:
         render_completed_training_ui(training_type=training_type)
 
 
+
+def render_attention_heatmap(attn_map, token_labels, layer_idx, head_idx) -> None:
+    """Render attention heatmap using Plotly.
+
+    Args:
+        attn_map: Attention pattern matrix [seq_len, seq_len] (numpy array)
+        token_labels: List of token strings corresponding to the sequence
+        layer_idx: Layer index for title
+        head_idx: Head index for title
+    """
+    import plotly.express as px
+
+    # Use indices for x/y to avoid collapsing duplicate tokens
+    indices = list(range(len(token_labels)))
+
+    fig = px.imshow(
+        attn_map,
+        x=indices,
+        y=indices,
+        labels=dict(x="Key (Source)", y="Query (Destination)", color="Attention"),
+        title=f"Layer {layer_idx} Head {head_idx} Attention",
+        color_continuous_scale="Viridis"
+    )
+
+    # Manually set tick labels to show tokens
+    # If too many tokens, we might want to let plotly handle auto-ticks but usually we want to see them all
+    # for detailed inspection.
+    fig.update_xaxes(
+        tickmode='array',
+        tickvals=indices,
+        ticktext=token_labels,
+        tickangle=90 if len(token_labels) > 20 else 0
+    )
+    fig.update_yaxes(
+        tickmode='array',
+        tickvals=indices,
+        ticktext=token_labels
+    )
+    fig.update_layout(height=600)  # Auto width
+    st.plotly_chart(fig, width='stretch')
+
+
 # ============================================================================
 # Model Configuration
 # ============================================================================

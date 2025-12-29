@@ -21,7 +21,8 @@ from ui_components import (
     render_model_config_ui, render_model_architecture_diagram, render_model_equations,
     render_model_code_snippets, format_elapsed_time, get_total_training_time,
     render_training_metrics, render_all_losses_graph, render_eval_losses_graph,
-    render_completed_training_ui, render_active_training_ui, display_training_status
+    render_completed_training_ui, render_active_training_ui, display_training_status,
+    render_attention_heatmap
 )
 
 
@@ -305,7 +306,7 @@ with st.container():
         
     with col2:
         # Renamed to "Start/Reset Training"
-        init_manual = st.button("Start/Reset Training", type="primary", use_container_width=True)
+        init_manual = st.button("Start/Reset Training", type="primary", width='stretch')
         
     # Initialization Logic
     if init_manual:
@@ -367,16 +368,16 @@ with st.container():
              st.session_state.auto_stepping = False # Default if not set
              
          if st.session_state.auto_stepping:
-             if st.button("⏸️ Pause", use_container_width=True):
+             if st.button("⏸️ Pause", width='stretch'):
                  st.session_state.auto_stepping = False
                  st.rerun()
          else:
-             if st.button("▶️ Resume Auto-Step", use_container_width=True, disabled=not st.session_state.get("manual_initialized", False)):
+             if st.button("▶️ Resume Auto-Step", width='stretch', disabled=not st.session_state.get("manual_initialized", False)):
                  st.session_state.auto_stepping = True
                  st.rerun()
                  
     with col3:
-         step_btn = st.button("👣 Step (1 Batch)", type="primary", use_container_width=True, 
+         step_btn = st.button("👣 Step (1 Batch)", type="primary", width='stretch', 
                              disabled=not st.session_state.get("manual_initialized", False))
     
     # Logic for performing a step (either manual click or auto-step)
@@ -577,17 +578,9 @@ with st.container():
                          except:
                              token_labels.append(f"T{tid}")
                              
-                     # Create Heatmap
-                     fig = px.imshow(
-                         attn_map,
-                         x=token_labels,
-                         y=token_labels,
-                         labels=dict(x="Key (Source)", y="Query (Destination)", color="Attention"),
-                         title=f"Layer {layer_idx} Head {head_idx} Attention",
-                         color_continuous_scale="Viridis"
-                     )
-                     fig.update_layout(height=600) # Auto width
-                     st.plotly_chart(fig, use_container_width=True)
+                     
+                     # Render heatmap using shared component
+                     render_attention_heatmap(attn_map, token_labels, layer_idx, head_idx)
                  
     # Trigger next step if auto-stepping is active
     if st.session_state.get("auto_stepping", False) and st.session_state.get("manual_initialized", False):
