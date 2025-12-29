@@ -464,6 +464,132 @@ def display_training_status(training_type: str = "Training") -> None:
         render_completed_training_ui(training_type=training_type)
 
 
+def render_interactive_dashboard(
+    trainer,
+    metrics: Dict,
+    current_step: int,
+    start_time: float,
+    loss_data: Dict,
+    tokenizer,
+    logs: List[Dict],
+    title: str = "Interactive Training"
+) -> None:
+    """
+    Render the complete interactive training dashboard (Metrics, Graphs, Analysis).
+    Unified component for both Pre-Training and Fine-Tuning.
+    """
+    import pandas as pd
+    
+    max_steps = trainer.max_iters
+    progress = min(current_step / max_steps, 1.0)
+    
+    # 1. Metrics
+    latest_val_loss = None
+    if loss_data["val_losses"]:
+        latest_val_loss = loss_data["val_losses"][-1]
+        
+    render_training_metrics(
+        current_iter=current_step,
+        current_loss=metrics["loss"],
+        running_loss=metrics["running_loss"],
+        val_loss=latest_val_loss,
+        progress=progress,
+        max_iters=max_steps
+    )
+    
+    # 2. Graphs
+    # Training Loss
+    all_losses_data = {
+        "iterations": list(range(1, current_step + 1)),
+        "current_losses": [m["loss"] for m in logs],
+        "running_losses": [m["running_loss"] for m in logs]
+    }
+    render_all_losses_graph(all_losses_data, training_type=title)
+    
+    # Eval Loss
+    if loss_data["iterations"]:
+        render_eval_losses_graph(loss_data)
+        
+    # 3. Text & Analysis
+    if "inputs" in metrics and "targets" in metrics:
+        st.markdown("### 🔍 Inspect Batch")
+        current_bs = metrics["inputs"].shape[0]
+        # Allow user to pick which sample in the batch to view
+        # Use a unique key based on step to prevent state issues
+        sample_idx = st.slider(
+            "Select Sample", 
+            min_value=1, 
+            max_value=current_bs, 
+            value=1,
+            key=f"sample_slider_{current_step}",
+            help="Select which sequence from the current batch to inspect."
+        ) - 1
+        
+        input_ids = metrics["inputs"][sample_idx]
+        target_ids = metrics["targets"][sample_idx]
+        masks = metrics["masks"][sample_idx] if "masks" in metrics else None
+        
+        # Determine effective length (hide padding for visual clarity)
+        effective_len = None
+        if masks is not None:
+             try:
+                 # Find last index where mask is 1 (end of response)
+                 # Note: masks is boolean-like (1 for response, 0 for prompt/padding)
+                 # Typically prompt is 0, response is 1, padding is 0. 
+                 # We want the LAST 1 (end of valid response).
+                 last_response_idx = (masks == 1).nonzero(as_tuple=True)[0][-1].item()
+                 effective_len = last_response_idx + 1
+             except (IndexError, RuntimeError):
+                 # Fallback if no 1s found or other error
+                 effective_len = len(masks)
+        
+        # Token Analysis
+        render_token_analysis_ui(
+            input_ids=input_ids[:effective_len] if effective_len else input_ids,
+            target_ids=target_ids[:effective_len] if effective_len else target_ids,
+            tokenizer=tokenizer,
+            model=trainer.model,
+            masks=masks[:effective_len] if effective_len and masks is not None else masks,
+            sample_idx=sample_idx,
+            n_ctx=None # Let component determine length from input
+        )
+        
+        # Attention Heatmap
+        st.divider()
+        with st.expander("🔥 Attention Heatmaps", expanded=True):
+             col_l, col_h = st.columns(2)
+             cfg = trainer.model.cfg
+             with col_l:
+                 layer_idx = st.slider("Layer", 0, cfg.n_layers - 1, 0, key=f"attn_l_{current_step}_shared")
+             with col_h:
+                 head_idx = st.slider("Head", 0, cfg.n_heads - 1, 0, key=f"attn_h_{current_step}_shared")
+             
+             # We need to run the model to get attention patterns (diagnostics)
+             # The trainer step might not save diagnostics to save memory.
+             # So we re-run inference on this single sample.
+             with st.spinner("Calculating attention..."):
+                 device = get_device()
+                 sample_tokens = input_ids.unsqueeze(0).to(device)
+                 with torch.no_grad():
+                     outputs = trainer.model(sample_tokens, return_diagnostics=True)
+                     diagnostics = outputs[-1] if isinstance(outputs, tuple) else None
+             
+             if diagnostics and "attention_patterns" in diagnostics:
+                 attn_map = diagnostics["attention_patterns"][layer_idx][0, head_idx].cpu().numpy()
+                 
+                 # Generate labels
+                 input_ids_list = input_ids.tolist()
+                 token_labels = []
+                 for tid in input_ids_list:
+                     try:
+                         decoded = tokenizer.decode([tid])
+                         token_labels.append(f"'{decoded}'")
+                     except:
+                         token_labels.append(f"T{tid}")
+                 
+                 render_attention_heatmap(attn_map, token_labels, layer_idx, head_idx)
+
+
 
 def render_attention_heatmap(attn_map, token_labels, layer_idx, head_idx) -> None:
     """Render attention heatmap using Plotly.
@@ -652,19 +778,17 @@ def render_token_analysis_ui(
 
     # Layout: Input (Left) | Target + Analysis (Right)
     st.markdown(f"##### 📖 Current Batch Sample ({sample_idx + 1})")
-    if n_ctx:
-        st.caption(f"Sequence Length: {len(input_ids)} / {n_ctx} tokens")
     
     c1, c2 = st.columns([3, 1])
     with c1:
         if is_sft:
-             st.markdown("**Input (Prompt)**")
+             st.markdown(f"**Input (Prompt)**")
              st.markdown(
                  f'<div style="background-color: #262730; padding: 15px; border-radius: 5px; white-space: pre-wrap; font-family: monospace; font-size: 14px; line-height: 1.8;">{prompt_html}</div>',
                  unsafe_allow_html=True
              )
         else:
-             st.markdown("**Input (Context)**")
+             st.markdown(f"**Input (Context)** ({n_ctx} tokens)")
              st.markdown(
                  f'<div style="background-color: #262730; padding: 15px; border-radius: 5px; white-space: pre-wrap; font-family: monospace; font-size: 14px; line-height: 1.8;">{colored_html}</div>',
                  unsafe_allow_html=True

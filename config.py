@@ -300,3 +300,34 @@ class ModelConfig:
         if not config_dict.get("use_moe", False) and "router_type" not in config_dict:
             config_dict["router_type"] = None
         return cls(**config_dict)
+
+    @classmethod
+    def from_ui_dict(cls, model_config: dict):
+        """Create ModelConfig from UI config dict (helper for Streamlit UI)."""
+        return cls(
+            architecture=Architecture.GPT,  # Base, usually doesn't matter for this educational repo usage or is overriden? actually looking at usage in Pre-Training.py it hardcodes GPT.
+            d_model=model_config["d_model"],
+            n_heads=model_config["n_heads"],
+            # Default to MHA if not specified
+            n_kv_heads=model_config.get("n_kv_heads", model_config["n_heads"]),
+            n_layers=model_config["n_layers"],
+            n_ctx=model_config["n_ctx"],
+            d_head=model_config["d_head"],
+            d_mlp=model_config["d_mlp"],
+            positional_encoding=PositionalEncoding(
+                model_config["positional_encoding"]),
+            normalization=Normalization(model_config["normalization"]),
+            activation=Activation(model_config["activation"]),
+            rope_theta=model_config.get("rope_theta", 10000.0),
+            use_moe=model_config.get("use_moe", False),
+            num_experts=model_config.get("num_experts", 8),
+            num_experts_per_tok=model_config.get("num_experts_per_tok", 2),
+            use_shared_experts=model_config.get("use_shared_experts", False),
+            num_shared_experts=model_config.get("num_shared_experts", 2),
+            router_type=RouterType(model_config.get(
+                "router_type", "top_k")) if model_config.get("use_moe", False) else None,
+            load_balancing_loss_weight=model_config.get(
+                "load_balancing_loss_weight", 0.01),
+            expert_capacity_factor=model_config.get(
+                "expert_capacity_factor", 1.25),
+        )

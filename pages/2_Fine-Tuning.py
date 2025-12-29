@@ -22,71 +22,11 @@ from ui_components import (
     render_checkpoint_selector, render_finetuning_equations, render_finetuning_code_snippets,
     format_elapsed_time, render_training_metrics,
     render_all_losses_graph, render_eval_losses_graph,
-    display_training_status, render_attention_heatmap
+    display_training_status, render_attention_heatmap, render_interactive_dashboard
 )
 from config import PositionalEncoding
 from utils import get_device
-
-
-def _extend_positional_embeddings(pos_embed_module, new_max_length: int):
-    """
-    Extend positional embeddings to support longer sequences.
-    
-    Uses interpolation to extend the embedding matrix. This is a common
-    technique for extending pre-trained positional embeddings to longer contexts.
-    
-    Args:
-        pos_embed_module: The positional embedding module (PosEmbedWithEinops or PosEmbedWithoutEinops)
-        new_max_length: New maximum sequence length
-    """
-    old_W_pos = pos_embed_module.W_pos  # [old_n_ctx, d_model]
-    old_n_ctx, d_model = old_W_pos.shape
-
-    if new_max_length <= old_n_ctx:
-        # No extension needed
-        return
-
-    # Create new embedding matrix
-    new_W_pos = torch.empty((new_max_length, d_model),
-                            device=old_W_pos.device, dtype=old_W_pos.dtype)
-
-    # Copy existing embeddings
-    new_W_pos[:old_n_ctx] = old_W_pos
-
-    # For positions beyond the original length, use interpolation
-    # Method: Use the last few positions to extrapolate smoothly
-    if old_n_ctx >= 2:
-        # Use the trend from the last few positions
-        # Compute average "velocity" (difference between consecutive positions)
-        # and extrapolate
-        last_few = min(10, old_n_ctx)  # Use last 10 positions or all if fewer
-        recent_embeds = old_W_pos[-last_few:]  # [last_few, d_model]
-
-        # Compute average change per position
-        if last_few >= 2:
-            diffs = recent_embeds[1:] - \
-                recent_embeds[:-1]  # [last_few-1, d_model]
-            # [d_model] - average change per position
-            avg_diff = diffs.mean(dim=0)
-        else:
-            avg_diff = torch.zeros_like(old_W_pos[-1])
-
-        # Extrapolate: start from last position and add scaled differences
-        last_embed = old_W_pos[-1]  # [d_model]
-        for i in range(old_n_ctx, new_max_length):
-            # Scale the difference based on how far we are from the original range
-            # Use a decay factor to prevent embeddings from growing too large
-            steps_from_end = i - old_n_ctx + 1
-            decay = 0.9 ** steps_from_end  # Exponential decay
-            new_W_pos[i] = last_embed + avg_diff * steps_from_end * decay
-    else:
-        # If only one position, just repeat it
-        new_W_pos[old_n_ctx:] = old_W_pos[-1]
-
-    # Update the parameter
-    pos_embed_module.W_pos = torch.nn.Parameter(new_W_pos)
-    # Update cfg.n_ctx to reflect the new max length
-    pos_embed_module.cfg.n_ctx = new_max_length
+from pretraining.model.utils import extend_positional_embeddings
 
 
 def _render_quick_stats(batch_size, lr, epochs, max_length, use_lora, lora_rank=None):
@@ -336,7 +276,7 @@ with st.container():
                      )
                      if uses_learned_pos:
                          if hasattr(model, 'pos_embed') and model.pos_embed is not None:
-                             _extend_positional_embeddings(model.pos_embed, max_length)
+                             extend_positional_embeddings(model.pos_embed, max_length)
                              st.toast(f"Extended pos embeddings to {max_length}", icon="📏")
                          else:
                              st.error(f"Cannot extend pos embeddings. Max length {model_max_length}")
@@ -490,112 +430,19 @@ with st.container():
     if "last_sft_metrics" in st.session_state:
         metrics = st.session_state.last_sft_metrics
         current_step = len(st.session_state.sft_logs)
-        max_steps = st.session_state.sft_trainer.max_iters
-        progress = min(current_step / max_steps, 1.0)
         
-        # 1. Metrics
-        latest_val_loss = None
-        if st.session_state.sft_shared_loss_data["val_losses"]:
-            latest_val_loss = st.session_state.sft_shared_loss_data["val_losses"][-1]
-            
-        render_training_metrics(
-            current_iter=current_step,
-            current_loss=metrics["loss"],
-            running_loss=metrics["running_loss"],
-            val_loss=latest_val_loss,
-            progress=progress,
-            max_iters=max_steps
+        from ui_components import render_interactive_dashboard
+        
+        render_interactive_dashboard(
+            trainer=st.session_state.sft_trainer,
+            metrics=metrics,
+            current_step=current_step,
+            start_time=st.session_state.sft_start_time,
+            loss_data=st.session_state.sft_shared_loss_data,
+            tokenizer=st.session_state.sft_tokenizer,
+            logs=st.session_state.sft_logs,
+            title="Fine-Tuning Interactive"
         )
-        
-        # 2. Graph
-        all_losses_data = {
-            "iterations": list(range(1, current_step + 1)),
-            "current_losses": [m["loss"] for m in st.session_state.sft_logs],
-            "running_losses": [m["running_loss"] for m in st.session_state.sft_logs]
-        }
-        render_all_losses_graph(all_losses_data, training_type="Fine-Tuning Interactive")
-        
-        if st.session_state.sft_shared_loss_data["iterations"]:
-            render_eval_losses_graph(st.session_state.sft_shared_loss_data)
-            
-        # 3. Text Samples
-        if "inputs" in metrics and "targets" in metrics:
-            st.markdown("### 🔍 Inspect Batch")
-            current_bs = metrics["inputs"].shape[0]
-            sample_idx = st.slider("Select Sample", 1, current_bs, 1) - 1
-            
-            input_ids = metrics["inputs"][sample_idx]
-            target_ids = metrics["targets"][sample_idx]
-            masks = metrics["masks"][sample_idx]
-            
-            # Identify effective sequence length (Prompt + Response, ignoring Padding)
-            # This logic was used to hide padding in the text view
-            try:
-                # Find last index where mask is 1 (end of response)
-                # Note: masks is boolean-like (1 for response, 0 for prompt/padding)
-                # But typically prompt is 0, response is 1, padding is 0.
-                # So we want the LAST 1.
-                last_response_idx = (masks == 1).nonzero(as_tuple=True)[0][-1].item()
-                effective_len = last_response_idx + 1
-            except IndexError:
-                # Fallback
-                last_response_idx = len(masks) - 1
-                effective_len = len(masks)
-
-            # Unified Component with truncated view (hiding padding)
-            from ui_components import render_token_analysis_ui
-            
-            # Pass truncated tensors so padding doesn't show up in the text/target view
-            # This makes it cleaner as requested
-            render_token_analysis_ui(
-                input_ids=input_ids[:effective_len],
-                target_ids=target_ids[:effective_len],
-                tokenizer=st.session_state.sft_tokenizer,
-                model=st.session_state.sft_trainer.model,
-                masks=masks[:effective_len],
-                sample_idx=sample_idx,
-                n_ctx=None
-            )
-            
-            # Attention Heatmap
-            st.divider()
-            with st.expander("🔥 Attention Heatmaps", expanded=True):
-                 col_l, col_h = st.columns(2)
-                 cfg = st.session_state.sft_trainer.model.cfg
-                 with col_l:
-                     layer_idx = st.slider("Layer", 0, cfg.n_layers - 1, 0, key=f"sft_attn_l_{current_step}")
-                 with col_h:
-                     head_idx = st.slider("Head", 0, cfg.n_heads - 1, 0, key=f"sft_attn_h_{current_step}")
-                 
-                 # Recalculate diagnostics for heatmap (using FULL sequence to see padding effects if desired, 
-                 # or we could use effective_len. The original code used full sequence. I'll stick to full.)
-                 
-                 # Labels for Heatmap: Full sequence
-                 tokenizer = st.session_state.sft_tokenizer
-                 token_labels = []
-                 for i, tid in enumerate(input_ids.tolist()): # Full input_ids
-                     if i > last_response_idx:
-                         token_labels.append("'<PAD>'")
-                     else:
-                         try:
-                             decoded = tokenizer.decode([tid])
-                             token_labels.append(f"'{decoded}'")
-                         except:
-                             token_labels.append(f"T{tid}")
-
-                 # Compute diagnostics
-                 with st.spinner("Calculating attention..."):
-                     # Pass full padded sequence to model
-                     sample_tokens = input_ids.unsqueeze(0).to(get_device())
-                     model = st.session_state.sft_trainer.model
-                     with torch.no_grad():
-                         outputs = model(sample_tokens, return_diagnostics=True)
-                         diagnostics = outputs[-1] if isinstance(outputs, tuple) else None
-                 
-                 if diagnostics and "attention_patterns" in diagnostics:
-                     # Use full attention map
-                     attn_map = diagnostics["attention_patterns"][layer_idx][0, head_idx].cpu().numpy()
-                     render_attention_heatmap(attn_map, token_labels, layer_idx, head_idx)
     
     # Auto-stepping trigger
     if st.session_state.get("sft_auto_stepping", False) and st.session_state.get("sft_initialized", False):

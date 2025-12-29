@@ -22,43 +22,11 @@ from ui_components import (
     render_model_code_snippets, format_elapsed_time, get_total_training_time,
     render_training_metrics, render_all_losses_graph, render_eval_losses_graph,
     render_completed_training_ui, render_active_training_ui, display_training_status,
-    render_attention_heatmap
+    render_attention_heatmap, render_interactive_dashboard
 )
 
 
 # Define helper functions first
-def _create_model_config(model_config: dict) -> ModelConfig:
-    """Create ModelConfig from UI config dict."""
-    from config import RouterType
-
-    cfg = ModelConfig(
-        architecture=Architecture.GPT,  # Base, doesn't matter
-        d_model=model_config["d_model"],
-        n_heads=model_config["n_heads"],
-        # Default to MHA if not specified
-        n_kv_heads=model_config.get("n_kv_heads", model_config["n_heads"]),
-        n_layers=model_config["n_layers"],
-        n_ctx=model_config["n_ctx"],
-        d_head=model_config["d_head"],
-        d_mlp=model_config["d_mlp"],
-        positional_encoding=PositionalEncoding(
-            model_config["positional_encoding"]),
-        normalization=Normalization(model_config["normalization"]),
-        activation=Activation(model_config["activation"]),
-        rope_theta=model_config.get("rope_theta", 10000.0),
-        use_moe=model_config.get("use_moe", False),
-        num_experts=model_config.get("num_experts", 8),
-        num_experts_per_tok=model_config.get("num_experts_per_tok", 2),
-        use_shared_experts=model_config.get("use_shared_experts", False),
-        num_shared_experts=model_config.get("num_shared_experts", 2),
-        router_type=RouterType(model_config.get(
-            "router_type", "top_k")) if model_config.get("use_moe", False) else None,
-        load_balancing_loss_weight=model_config.get(
-            "load_balancing_loss_weight", 0.01),
-        expert_capacity_factor=model_config.get(
-            "expert_capacity_factor", 1.25),
-    )
-    return cfg
 
 
 def _start_training_workflow(uploaded_file, model_config, tokenizer_type, use_einops,
@@ -74,7 +42,7 @@ def _start_training_workflow(uploaded_file, model_config, tokenizer_type, use_ei
     st.info(f"Loaded {len(text):,} characters.")
 
     # Create config
-    cfg = _create_model_config(model_config)
+    cfg = ModelConfig.from_ui_dict(model_config)
 
     # Create dataset
     dataset = TransformerDataset(text, cfg, tokenizer_type=tokenizer_type)
@@ -347,7 +315,7 @@ with st.container():
                      text = f.read()
              
              # Create config/dataset/model
-             cfg = _create_model_config(model_config)
+             cfg = ModelConfig.from_ui_dict(model_config)
              dataset = TransformerDataset(text, cfg, tokenizer_type=tokenizer_type)
              cfg = dataset.cfg
              device = get_device()
@@ -454,142 +422,50 @@ with st.container():
 
     # Display Metrics & Text (from last step)
     if "last_manual_metrics" in st.session_state:
-         metrics = st.session_state.last_manual_metrics
-         
-         # Prepare data for standard UI
-         current_step = len(st.session_state.manual_logs)
-         max_steps = st.session_state.manual_trainer.max_iters
-         progress = min(current_step / max_steps, 1.0)
-         
-         # 1. Render Standard Metrics
-         # Handle val_loss display if available
-         latest_val_loss = None
-         if st.session_state.shared_loss_data["val_losses"]:
-             latest_val_loss = st.session_state.shared_loss_data["val_losses"][-1]
-             
-         render_training_metrics(
-             current_iter=current_step,
-             current_loss=metrics["loss"],
-             running_loss=metrics["running_loss"],
-             val_loss=latest_val_loss, 
-             progress=progress,
-             max_iters=max_steps
-         )
-         
-         # 2. Render Standard Graph (Training Loss)
-         all_losses_data = {
-             "iterations": list(range(1, current_step + 1)),
-             "current_losses": [m["loss"] for m in st.session_state.manual_logs],
-             "running_losses": [m["running_loss"] for m in st.session_state.manual_logs]
-         }
-         render_all_losses_graph(all_losses_data, training_type="Interactive Training")
-         
-         # 2b. Render Evaluation Graph (Train vs Val) - IF we have data
-         if st.session_state.shared_loss_data["iterations"]:
-             render_eval_losses_graph(st.session_state.shared_loss_data)
-         
-         # 3. Render Text Samples
-         if "inputs" in metrics and "targets" in metrics and "manual_tokenizer" in st.session_state:
-             # Get batch size from data
-             current_bs = metrics["inputs"].shape[0]
-             n_ctx = metrics["inputs"].shape[1]
-             
-             # Allow user to pick which sample in the batch to view
-             sample_idx = st.slider(
-                 "Inspect Batch Sample", 
-                 min_value=1, 
-                 max_value=current_bs, 
-                 value=1,
-                 help="Select which sequence from the current batch to inspect."
-             ) - 1 # Convert 1-based UI to 0-based index
-             
-             # Decode selected sample
-             input_ids = metrics["inputs"][sample_idx]
-             target_ids = metrics["targets"][sample_idx]
-             
-             # Unified component for Text & Logits
-             from ui_components import render_token_analysis_ui
-             render_token_analysis_ui(
-                 input_ids=input_ids,
-                 target_ids=target_ids,
-                 tokenizer=st.session_state.manual_tokenizer,
-                 model=st.session_state.manual_trainer.model,
-                 sample_idx=sample_idx,
-                 n_ctx=n_ctx
-             )
+        metrics = st.session_state.last_manual_metrics
+        
+        # Prepare data for standard UI
+        current_step = len(st.session_state.manual_logs)
+        
+        from ui_components import render_interactive_dashboard
+        
+        render_interactive_dashboard(
+            trainer=st.session_state.manual_trainer,
+            metrics=metrics,
+            current_step=current_step,
+            start_time=st.session_state.training_start_time,
+            loss_data=st.session_state.shared_loss_data,
+            tokenizer=st.session_state.manual_tokenizer,
+            logs=st.session_state.manual_logs,
+            title="Interactive Training"
+        )
             
-             # Recalculate diagnostics for Heatmap (since shared component only does logits internally if needed)
-             # OR better: The shared component re-runs the model for logits. 
-             # If we want to share the diagnostics, the component should return them or we re-run.
-             # Efficiency: The component runs forward pass for logits. If we want heatmap, we need diagnostics.
-             # My component implementation does NOT return diagnostics. 
-             # Implication: We might run the model twice. Given this is interactive UI (one sample), it's acceptable.
-             
-             # Re-run for diagnostics for heatmap
-             diagnostics = None
-             with torch.no_grad():
-                 model = st.session_state.manual_trainer.model
-                 sample_tokens = input_ids.unsqueeze(0).to(get_device())
-                 outputs = model(sample_tokens, return_diagnostics=True)
-                 if isinstance(outputs, tuple):
-                     diagnostics = outputs[-1]
-
-             # === ATTENTION HEATMAPS (Full Width) ===
-             if diagnostics and "attention_patterns" in diagnostics:
-                 st.divider()
-                 st.markdown("### 🔥 Attention Heatmaps")
-                 st.caption("Visualize how the model attends to different tokens in this sample.")
-                 
-                 # Select Layer and Head
-                 col_l, col_h = st.columns(2)
-                 cfg = model.cfg
-                 with col_l:
-                     layer_idx = st.slider("Select Layer", 0, cfg.n_layers - 1, 0, key=f"attn_layer_{current_step}")
-                 with col_h:
-                     head_idx = st.slider("Select Head", 0, cfg.n_heads - 1, 0, key=f"attn_head_{current_step}")
-                 
-                 # Get attention pattern
-                 attn_map = diagnostics["attention_patterns"][layer_idx][0, head_idx].cpu().numpy()
-                 
-                 # Labels
-                 input_ids_list = input_ids.tolist()
-                 token_labels = []
-                 for tid in input_ids_list:
-                     try:
-                         decoded = st.session_state.manual_tokenizer.decode([tid])
-                         token_labels.append(f"'{decoded}'")
-                     except:
-                         token_labels.append(f"T{tid}")
-                 
-                 render_attention_heatmap(attn_map, token_labels, layer_idx, head_idx)
-
-                 
     # Trigger next step if auto-stepping is active
     if st.session_state.get("auto_stepping", False) and st.session_state.get("manual_initialized", False):
-         # No sleep - run as fast as possible
-         st.rerun()
-         
+        # No sleep - run as fast as possible
+        st.rerun()
+        
     # Visualize Manual Logs (Grad Norm)
     if st.session_state.get("manual_initialized", False) and st.session_state.manual_logs:
-         import plotly.graph_objects as go
-         
-         logs_df = pd.DataFrame(st.session_state.manual_logs)
-         iterations = list(range(1, len(logs_df) + 1))
-         
-         fig_grad = go.Figure()
-         fig_grad.add_trace(go.Scatter(
-             x=iterations, y=logs_df["grad_norm"],
-             mode="lines", name="Gradient Norm",
-             line={"color": "#FF4B4B", "width": 2}
-         ))
-         
-         fig_grad.update_layout(
-             title="Gradient Norm (Training Stability)",
-             xaxis_title="Step", yaxis_title="Grad Norm",
-             hovermode="x unified", height=300,
-             template="plotly_dark" if st.get_option("theme.base") == "dark" else "plotly"
-         )
-         st.plotly_chart(fig_grad, width='stretch')
+        import plotly.graph_objects as go
+        
+        logs_df = pd.DataFrame(st.session_state.manual_logs)
+        iterations = list(range(1, len(logs_df) + 1))
+        
+        fig_grad = go.Figure()
+        fig_grad.add_trace(go.Scatter(
+            x=iterations, y=logs_df["grad_norm"],
+            mode="lines", name="Gradient Norm",
+            line={"color": "#FF4B4B", "width": 2}
+        ))
+        
+        fig_grad.update_layout(
+            title="Gradient Norm (Training Stability)",
+            xaxis_title="Step", yaxis_title="Grad Norm",
+            hovermode="x unified", height=300,
+            template="plotly_dark" if st.get_option("theme.base") == "dark" else "plotly"
+        )
+        st.plotly_chart(fig_grad, width='stretch')
 
 # Clean up helper function block if no longer needed
 # But _create_model_config is still used by Init Manual
