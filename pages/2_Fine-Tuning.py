@@ -541,17 +541,15 @@ with st.container():
             try:
                 # Find last index where mask is 1 (end of response)
                 last_response_idx = (masks == 1).nonzero(as_tuple=True)[0][-1].item()
-                # We want to show everything up to this index
                 effective_len = last_response_idx + 1
             except IndexError:
                 # Fallback
+                last_response_idx = len(masks) - 1
                 effective_len = len(masks)
             
-            # Slice the data for visualization
+            # 1. Text Sample: Truncated for cleanliness
             input_ids_view = input_ids[:effective_len]
             masks_view = masks[:effective_len]
-            
-            token_labels = [] # For heatmap
             
             for i, tid in enumerate(input_ids_view.tolist()):
                 is_response = masks_view[i].item() == 1
@@ -566,7 +564,6 @@ with st.container():
                     status = "Prompt"
                 
                 token_text = tokenizer.decode([tid])
-                token_labels.append(f"'{token_text}'")
                 safe_token = html.escape(token_text)
                 
                 tokens_html += f'<span style="background-color: {bg_color}; border: {border}; margin: 0 1px; padding: 0 2px;" title="{status} | ID: {tid}">{safe_token}</span>'
@@ -575,8 +572,20 @@ with st.container():
                 f'<div style="background-color: #262730; padding: 15px; border-radius: 5px; line-height: 1.8; font-family: monospace;">{tokens_html}</div>', 
                 unsafe_allow_html=True
             )
-            st.caption("Teal = Response (Target), Grey = Prompt. Padding tokens are hidden.")
+            st.caption("Teal = Response (Target), Grey = Prompt. Padding hidden in text view.")
             
+            # 2. Labels for Heatmap: Full sequence with <PAD>
+            token_labels = []
+            for i, tid in enumerate(input_ids.tolist()):
+                if i > last_response_idx:
+                    token_labels.append("'<PAD>'")
+                else:
+                    try:
+                        decoded = tokenizer.decode([tid])
+                        token_labels.append(f"'{decoded}'")
+                    except:
+                        token_labels.append(f"T{tid}")
+
             # Attention Heatmap
             st.divider()
             with st.expander("🔥 Attention Heatmaps", expanded=True):
@@ -589,7 +598,7 @@ with st.container():
                  
                  # Compute diagnostics
                  with st.spinner("Calculating attention..."):
-                     # Pass full padded sequence to model for correct calculation
+                     # Pass full padded sequence to model
                      sample_tokens = input_ids.unsqueeze(0).to(get_device())
                      model = st.session_state.sft_trainer.model
                      with torch.no_grad():
@@ -597,13 +606,8 @@ with st.container():
                          diagnostics = outputs[-1] if isinstance(outputs, tuple) else None
                  
                  if diagnostics and "attention_patterns" in diagnostics:
-                     # Slice the attention map to ignore padding
-                     # Pattern shape: [1, n_heads, seq_len, seq_len] -> [seq_len, seq_len] for specific head
-                     full_attn_map = diagnostics["attention_patterns"][layer_idx][0, head_idx].cpu().numpy()
-                     
-                     # Visualize only the non-padded region
-                     attn_map = full_attn_map[:effective_len, :effective_len]
-                     
+                     # Use full attention map
+                     attn_map = diagnostics["attention_patterns"][layer_idx][0, head_idx].cpu().numpy()
                      render_attention_heatmap(attn_map, token_labels, layer_idx, head_idx)
     
     # Auto-stepping trigger
