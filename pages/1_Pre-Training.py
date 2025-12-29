@@ -453,7 +453,32 @@ with st.container():
              input_ids = metrics["inputs"][sample_idx]
              target_ids = metrics["targets"][sample_idx]
              
-             input_text = st.session_state.manual_tokenizer.decode(input_ids.tolist())
+             input_ids_list = input_ids.tolist()
+             
+             # Generate Colored Tokens HTML
+             colored_html = ""
+             # Palette of translucent colors for dark mode
+             color_palette = [
+                 "rgba(255, 107, 107, 0.4)",   # Red
+                 "rgba(78, 205, 196, 0.4)",    # Teal
+                 "rgba(255, 217, 61, 0.4)",    # Yellow
+                 "rgba(167, 139, 250, 0.4)",   # Purple
+                 "rgba(255, 159, 26, 0.4)",    # Orange
+                 "rgba(69, 170, 242, 0.4)",    # Blue
+             ]
+             
+             import html
+             
+             for i, token_id in enumerate(input_ids_list):
+                 # Decode individual token
+                 token_text = st.session_state.manual_tokenizer.decode([token_id])
+                 # Handle special characters for HTML
+                 safe_token = html.escape(token_text)
+                 # Choose color
+                 color = color_palette[i % len(color_palette)]
+                 
+                 # Wrap in span. Use a title attribute to show the Token ID on hover!
+                 colored_html += f'<span style="background-color: {color}; border-radius: 2px; padding: 0 1px;" title="ID: {token_id}">{safe_token}</span>'
              
              # Format Target: Just show the LAST token (the "next" token for the full sequence)
              last_token_id = target_ids[-1].item()
@@ -467,13 +492,13 @@ with st.container():
              with c1:
                  st.markdown("**Input (Context)**")
                  st.markdown(
-                     f'<div style="background-color: #262730; padding: 15px; border-radius: 5px; white-space: pre-wrap; font-family: monospace; font-size: 12px;">{input_text}</div>',
+                     f'<div style="background-color: #262730; padding: 15px; border-radius: 5px; white-space: pre-wrap; font-family: monospace; font-size: 14px; line-height: 1.8;">{colored_html}</div>',
                      unsafe_allow_html=True
                  )
              with c2:
                  st.markdown("**Target (Next Token)**")
                  st.markdown(
-                     f'<div style="background-color: #262730; padding: 15px; border-radius: 5px; white-space: pre-wrap; font-family: monospace; font-size: 12px;">{target_display}</div>',
+                     f'<div style="background-color: #262730; padding: 15px; border-radius: 5px; white-space: pre-wrap; font-family: monospace; font-size: 14px; border: 1px solid #4CAF50;">{target_display}</div>',
                      unsafe_allow_html=True
                  )
                  st.caption("The model predicts the next token at every position. Here we show the final target token.")
