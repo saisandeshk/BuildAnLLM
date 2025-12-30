@@ -345,7 +345,7 @@ if load_model or st.session_state.current_model is not None:
                         if hasattr(unembed, "W_U"): # Manual
                              logits = vec_norm @ unembed.W_U
                         else: # Torch
-                             logits = unembed.unembedding(vec_norm)
+                             logits = unembed(vec_norm)
                              
                         # Top k
                         probs = torch.softmax(logits, dim=-1)
