@@ -99,17 +99,7 @@ The app will open in your browser with the following pages:
 
 ### Inference
 
-**Options**:
-- `--checkpoint`: Path to model checkpoint (e.g., `checkpoints/20240101120000/final_model.pt`)
-- `--prompt`: Starting text prompt
-- `--max_new_tokens`: Number of tokens to generate (default: 200)
-- `--temperature`: Sampling temperature (default: 0.8)
-- `--top_k`: Top-k sampling (optional)
-- `--top_p`: Top-p sampling (optional, default: 0.9)
-- `--tokenizer_type`: Tokenizer type (optional, auto-detected from checkpoint; only needed for old checkpoints)
-- `--text_file`: Text file for character tokenizer initialization (default: `training.txt`, only needed for character tokenizer)
-
-### How To
+#### How To
 
 1. Select a checkpoint from the dropdown (auto-scans `checkpoints/` directory)
    - Shows both pre-trained and fine-tuned checkpoints
@@ -1495,15 +1485,16 @@ def forward(self, tokens):
 ### LLM from Scratch
 
 - [ARENA's Transformers from Scratch](https://arena-chapter1-transformer-interp.streamlit.app/%5B1.1%5D_Transformer_from_Scratch)
-- [Neel Nanda on building an LLM from scratch](https://www.youtube.com/watch?v=bOYE6E8JrtU&list=PL7m7hLIqA0hoIUPhC26ASCVs_VrqcDpAz)
 - [Andrej Karpathy on building an LLM from scratch](https://www.youtube.com/watch?v=l8pRSuU81PU)
 - [Sebastian Raschka's Build an LLM from Scratch](https://sebastianraschka.com/llms-from-scratch/)
+- [Standord CS336: Languge Modeling From Scratch](https://www.youtube.com/playlist?list=PLoROMvodv4rOY23Y0BoGoBGgQ1zmU_MT_)
+- [Neel Nanda on building an LLM from scratch](https://www.youtube.com/watch?v=bOYE6E8JrtU&list=PL7m7hLIqA0hoIUPhC26ASCVs_VrqcDpAz)
 
 ### Background
 
 - [3Blue1Brown on LLMs](https://www.youtube.com/watch?v=LPZh9BOjkQs&list=PLZHQObOWTQDNU6R1_67000Dx_ZCJB-3pi&index=6)
 - [The Illustrated Transformer](https://jalammar.github.io/illustrated-transformer/)
-- [John Hewitt at Stanford on pre-training](https://www.youtube.com/watch?v=DGfCRXuNA2w&list=PLoROMvodv4rOaMFbaqxPDoLWjDaRAdP9D&index=11)
+- [John Hewitt on pre-training (Stanford CS224N)](https://www.youtube.com/watch?v=DGfCRXuNA2w&list=PLoROMvodv4rOaMFbaqxPDoLWjDaRAdP9D&index=11)
 - [Tom Yeh's AI By Hand](https://www.byhand.ai/)
 
 ### Architectures
