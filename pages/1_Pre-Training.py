@@ -14,7 +14,7 @@ from pretraining.training.training_args import TransformerTrainingArgs
 from pretraining.training.trainer import TransformerTrainer
 from pretraining.data.dataset import TransformerDataset
 from pretraining.model.model import TransformerModel
-from pretraining.training.training_ui import initialize_training_state, train_model_thread
+from training_utils import initialize_training_state
 from utils import get_device, format_elapsed_time
 
 from ui_components import (
@@ -29,110 +29,8 @@ from ui_components import (
 # Define helper functions first
 
 
-def _start_training_workflow(uploaded_file, model_config, tokenizer_type, use_einops,
-                             batch_size, lr, weight_decay, epochs, max_steps_per_epoch,
-                             eval_interval, save_interval):
-    """Start the training workflow."""
-    # Load text
-    if uploaded_file:
-        text = uploaded_file.read().decode("utf-8")
-    else:
-        with open("training.txt", "r", encoding="utf-8") as f:
-            text = f.read()
-    st.info(f"Loaded {len(text):,} characters.")
 
-    # Create config
-    cfg = ModelConfig.from_ui_dict(model_config)
 
-    # Create dataset
-    dataset = TransformerDataset(text, cfg, tokenizer_type=tokenizer_type)
-    cfg = dataset.cfg
-
-    X_train, Y_train = dataset.get_train_data()
-    X_val, Y_val = dataset.get_val_data()
-
-    # Initialize model
-    device = get_device()
-    from pretraining.model.model import TransformerModel
-    model = TransformerModel(cfg, use_einops=use_einops)
-    model = model.to(device)
-
-    param_count = sum(p.numel() for p in model.parameters()) / 1e6
-    st.success(f"Model initialized: {param_count:.2f}M parameters on {device}")
-
-    # Training args
-    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    checkpoint_dir = os.path.join("checkpoints", timestamp)
-    os.makedirs(checkpoint_dir, exist_ok=True)
-
-    training_args = TransformerTrainingArgs(
-        batch_size=batch_size,
-        epochs=epochs,
-        max_steps_per_epoch=max_steps_per_epoch,
-        lr=lr,
-        weight_decay=weight_decay,
-        save_dir=checkpoint_dir,
-        save_interval=save_interval,
-        eval_iters=50 if model_config["model_size"] == "small" else 200
-    )
-
-    # Create trainer
-    trainer = TransformerTrainer(
-        model=model,
-        args=training_args,
-        X_train=X_train,
-        Y_train=Y_train,
-        X_val=X_val,
-        Y_val=Y_val,
-        device=device,
-        eval_interval=eval_interval,
-        tokenizer_type=tokenizer_type
-    )
-
-    # Initialize training state
-    st.session_state.shared_loss_data = {
-        "iterations": [], "train_losses": [], "val_losses": []
-    }
-    st.session_state.shared_training_logs.clear()
-    st.session_state.training_active = True
-    st.session_state.trainer = trainer
-    st.session_state.training_start_time = time.time()
-
-    training_active_flag = [True]
-    progress_data = {
-        "iter": 0,
-        "loss": 0.0,
-        "running_loss": 0.0,
-        "val_loss": None,
-        "progress": 0.0,
-        "all_losses": {
-            "iterations": [],
-            "current_losses": [],
-            "running_losses": []
-        }
-    }
-
-    # Start training thread
-    thread = threading.Thread(
-        target=train_model_thread,
-        args=(
-            trainer,
-            st.session_state.shared_loss_data,
-            st.session_state.shared_training_logs,
-            training_active_flag,
-            st.session_state.training_lock,
-            progress_data
-        ),
-        daemon=True
-    )
-    thread.start()
-    st.session_state.training_thread = thread
-    st.session_state.training_active_flag = training_active_flag
-    st.session_state.progress_data = progress_data
-
-    st.success("Training started! Check the visualization below.")
-    time.sleep(0.5)
-    st.rerun()
 
 
 def _render_quick_stats(model_config, batch_size, lr, epochs):

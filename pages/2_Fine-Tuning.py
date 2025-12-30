@@ -17,7 +17,7 @@ from pretraining.tokenization.tokenizer import (
 from finetuning.data.sft_dataset import SFTDataset
 from finetuning.training.sft_trainer import SFTTrainer
 from finetuning.training.finetuning_args import FinetuningArgs
-from pretraining.training.training_ui import initialize_training_state
+from training_utils import initialize_training_state
 from ui_components import (
     render_checkpoint_selector, render_finetuning_equations, render_finetuning_code_snippets,
     format_elapsed_time, render_training_metrics,

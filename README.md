@@ -203,6 +203,8 @@ In the Glass Box view (Pre-Training and Inference), you can see this process hap
 - **Color Intensity**: Darker/Brighter colors indicate stronger focus.
 - **Diagonal Pattern**: A strong diagonal line means the model is mostly looking at the immediate previous token (common in early layers).
 
+![Attention Heatmap Example](assets/attention_heatmap.png)
+
 ### 4. Residual Connections
 
 **What it is**: Adding input to output: `output = input + transformation(input)`

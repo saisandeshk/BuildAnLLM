@@ -3,10 +3,35 @@
 import threading
 import time
 import traceback
+import streamlit as st
 from collections import deque
 from typing import Dict, Any, List
 
 from tqdm import tqdm
+
+
+def initialize_training_state():
+    """Initialize training-related session state."""
+    if "training_active" not in st.session_state:
+        st.session_state.training_active = False
+    if "trainer" not in st.session_state:
+        st.session_state.trainer = None
+    if "training_thread" not in st.session_state:
+        st.session_state.training_thread = None
+    if "shared_loss_data" not in st.session_state:
+        st.session_state.shared_loss_data = {
+            "iterations": [], "train_losses": [], "val_losses": []
+        }
+    if "shared_training_logs" not in st.session_state:
+        st.session_state.shared_training_logs = deque(maxlen=200)
+    if "training_lock" not in st.session_state:
+        st.session_state.training_lock = threading.Lock()
+    if "loss_data" not in st.session_state:
+        st.session_state.loss_data = {
+            "iterations": [], "train_losses": [], "val_losses": []
+        }
+    if "training_logs" not in st.session_state:
+        st.session_state.training_logs = []
 
 
 def run_training_thread(
