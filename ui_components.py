@@ -632,6 +632,48 @@ def render_attention_heatmap(attn_map, token_labels, layer_idx, head_idx) -> Non
     st.plotly_chart(fig, width='stretch')
 
 
+def render_colored_tokens_rainbow(input_ids, tokenizer) -> str:
+    """
+    Render tokens with rainbow coloring (for Pre-Training/Playground).
+    Returns: HTML string
+    """
+    import html
+    
+    if not torch.is_tensor(input_ids):
+        input_ids = torch.tensor(input_ids)
+        
+    input_ids_list = input_ids.tolist()
+    html_output = ""
+    
+    # Palette of translucent colors for dark mode
+    rainbow_palette = [
+        "rgba(255, 107, 107, 0.4)",   # Red
+        "rgba(78, 205, 196, 0.4)",    # Teal
+        "rgba(255, 217, 61, 0.4)",    # Yellow
+        "rgba(167, 139, 250, 0.4)",   # Purple
+        "rgba(255, 159, 26, 0.4)",    # Orange
+        "rgba(69, 170, 242, 0.4)",    # Blue
+    ]
+    
+    for i, token_id in enumerate(input_ids_list):
+        # Decode individual token
+        try:
+             token_text = tokenizer.decode([token_id])
+        except:
+             token_text = f"<{token_id}>"
+             
+        # Handle special characters for HTML
+        safe_token = html.escape(token_text)
+        
+        # Rainbow Coloring
+        bg_color = rainbow_palette[i % len(rainbow_palette)]
+        title_text = f"ID: {token_id}"
+        style = f"background-color: {bg_color}; border-radius: 2px; padding: 0 1px;"
+        html_output += f'<span style="{style}" title="{title_text}">{safe_token}</span>'
+        
+    return html_output
+
+
 def render_token_analysis_ui(
     input_ids,
     target_ids,
@@ -721,11 +763,7 @@ def render_token_analysis_ui(
                 prompt_html += f'<span style="{style}" title="{title_text}">{safe_token}</span>'
         else:
             # Pre-Training Mode: Rainbow
-            bg_color = rainbow_palette[i % len(rainbow_palette)]
-            border = "none"
-            title_text = f"ID: {token_id}"
-            style = f"background-color: {bg_color}; border-radius: 2px; padding: 0 1px;"
-            colored_html += f'<span style="{style}" title="{title_text}">{safe_token}</span>'
+            colored_html = render_colored_tokens_rainbow(input_ids, tokenizer)
 
     # Format Target Display
     # For SFT, the "Target" is the Response HTML generated above.

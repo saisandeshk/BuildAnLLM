@@ -162,7 +162,7 @@ with st.container():
 
 # Start training button
 with st.container():
-    st.markdown("### 🚀 6. Start Training")
+    st.markdown("### 🚀 6. Train")
 
     col1, col2, col3, col4 = st.columns([1.5, 1, 1, 1.5])
     
