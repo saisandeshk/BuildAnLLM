@@ -3,9 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import CodePanel from "../../components/CodePanel";
 import GraphvizDiagram from "../../components/GraphvizDiagram";
+import Heatmap from "../../components/Heatmap";
 import MarkdownBlock from "../../components/MarkdownBlock";
 import LineChart from "../../components/LineChart";
 import StatCard from "../../components/StatCard";
+import TokenRainbow from "../../components/TokenRainbow";
 import { fetchJson, makeFormData, CodeSnippet, JobStatus } from "../../lib/api";
 import { useSse } from "../../lib/useSse";
 import {
@@ -45,6 +47,18 @@ export default function PretrainPage() {
   const [logs, setLogs] = useState<string[]>([]);
   const [snippets, setSnippets] = useState<CodeSnippet[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [inspectSample, setInspectSample] = useState(0);
+  const [inspectMaxTokens, setInspectMaxTokens] = useState(128);
+  const [inspectData, setInspectData] = useState<{
+    token_labels: string[];
+    target_token: string;
+    top_predictions: { token: string; prob: number }[];
+    actual_rank?: number | null;
+    actual_prob?: number | null;
+  } | null>(null);
+  const [attention, setAttention] = useState<number[][]>([]);
+  const [attnLayer, setAttnLayer] = useState(0);
+  const [attnHead, setAttnHead] = useState(0);
 
   const ssePath = job ? `/api/pretrain/jobs/${job.job_id}/events` : undefined;
   const { lastEvent } = useSse(ssePath, Boolean(job));
@@ -72,6 +86,13 @@ export default function PretrainPage() {
       const payload = lastEvent.payload as { iter: number };
       setLogs((prev) => [`Checkpoint saved at ${payload.iter}`, ...prev].slice(0, 50));
     }
+    if (lastEvent.type === "eval") {
+      const payload = lastEvent.payload as { iter?: number; train_loss?: number; val_loss?: number };
+      const iter = payload.iter ?? "?";
+      const train = payload.train_loss?.toFixed?.(4) ?? "-";
+      const val = payload.val_loss?.toFixed?.(4) ?? "-";
+      setLogs((prev) => [`Eval @ ${iter}: train ${train}, val ${val}`, ...prev].slice(0, 50));
+    }
     if (lastEvent.type === "error") {
       const payload = lastEvent.payload as { message?: string };
       setError(payload?.message || "Training error");
@@ -84,6 +105,12 @@ export default function PretrainPage() {
     [modelConfig, useEinops]
   );
   const diagramDot = useMemo(() => generateGraphvizArchitecture(modelConfig), [modelConfig]);
+  const attentionType =
+    modelConfig.n_kv_heads === modelConfig.n_heads
+      ? "mha"
+      : modelConfig.n_kv_heads === 1
+      ? "mqa"
+      : "gqa";
 
   const handlePreset = (preset: string) => {
     setModelConfig((prev) => applyPreset(prev, preset));
@@ -127,6 +154,8 @@ export default function PretrainPage() {
       setLogs([]);
       setMetricsHistory([]);
       setEvalHistory([]);
+      setInspectData(null);
+      setAttention([]);
     } catch (err) {
       setError((err as Error).message);
     }
@@ -154,6 +183,55 @@ export default function PretrainPage() {
   const resumeJob = async () => {
     if (!job) return;
     await fetchJson(`/api/pretrain/jobs/${job.job_id}/resume`, { method: "POST" });
+  };
+
+  const inspectBatch = async () => {
+    if (!job) return;
+    setError(null);
+    try {
+      const data = await fetchJson<{
+        token_labels: string[];
+        target_token: string;
+        top_predictions: { token: string; prob: number }[];
+        actual_rank?: number | null;
+        actual_prob?: number | null;
+      }>(`/api/pretrain/jobs/${job.job_id}/inspect`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sample_index: inspectSample,
+          max_tokens: inspectMaxTokens,
+          top_k: 5,
+        }),
+      });
+      setInspectData(data);
+      setAttention([]);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  const loadAttention = async () => {
+    if (!job) return;
+    setError(null);
+    try {
+      const data = await fetchJson<{ attention: number[][] }>(
+        `/api/pretrain/jobs/${job.job_id}/attention`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sample_index: inspectSample,
+            max_tokens: inspectMaxTokens,
+            layer: attnLayer,
+            head: attnHead,
+          }),
+        }
+      );
+      setAttention(data.attention);
+    } catch (err) {
+      setError((err as Error).message);
+    }
   };
 
   return (
@@ -246,6 +324,29 @@ export default function PretrainPage() {
                 <option value="swiglu">SwiGLU</option>
               </select>
             </div>
+            <div>
+              <label>Attention Type</label>
+              <select
+                value={attentionType}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  setModelConfig((prev) => {
+                    if (next === "mha") {
+                      return { ...prev, n_kv_heads: prev.n_heads };
+                    }
+                    if (next === "mqa") {
+                      return { ...prev, n_kv_heads: 1 };
+                    }
+                    const defaultKv = Math.max(1, Math.floor(prev.n_heads / 4));
+                    return { ...prev, n_kv_heads: defaultKv };
+                  });
+                }}
+              >
+                <option value="mha">Multi-Head (MHA)</option>
+                <option value="gqa">Grouped Query (GQA)</option>
+                <option value="mqa">Multi-Query (MQA)</option>
+              </select>
+            </div>
             {modelConfig.positional_encoding === "rope" && (
               <div>
                 <label>RoPE Theta</label>
@@ -287,19 +388,21 @@ export default function PretrainPage() {
                 }
               />
             </div>
-            <div>
-              <label>n_kv_heads</label>
-              <input
-                type="number"
-                value={modelConfig.n_kv_heads || modelConfig.n_heads}
-                onChange={(event) =>
-                  setModelConfig((prev) => ({
-                    ...prev,
-                    n_kv_heads: Number(event.target.value),
-                  }))
-                }
-              />
-            </div>
+            {attentionType === "gqa" && (
+              <div>
+                <label>n_kv_heads</label>
+                <input
+                  type="number"
+                  value={modelConfig.n_kv_heads || modelConfig.n_heads}
+                  onChange={(event) =>
+                    setModelConfig((prev) => ({
+                      ...prev,
+                      n_kv_heads: Number(event.target.value),
+                    }))
+                  }
+                />
+              </div>
+            )}
             <div>
               <label>n_layers</label>
               <input
@@ -672,6 +775,105 @@ export default function PretrainPage() {
               { dataKey: "running_loss", name: "Running Loss", color: "#0f4c5c" },
             ]}
           />
+        </div>
+      </section>
+
+      <section className="section">
+        <div className="section-title">
+          <h2>Inspect Batch</h2>
+          <p>Peek at tokens, next-token predictions, and attention.</p>
+        </div>
+        <div className="card">
+          <div className="grid-3" style={{ marginBottom: 12 }}>
+            <div>
+              <label>Sample Index</label>
+              <input
+                type="number"
+                value={inspectSample}
+                onChange={(event) => setInspectSample(Number(event.target.value))}
+              />
+            </div>
+            <div>
+              <label>Max Tokens</label>
+              <input
+                type="number"
+                value={inspectMaxTokens}
+                onChange={(event) => setInspectMaxTokens(Number(event.target.value))}
+              />
+            </div>
+            <div>
+              <label>Actions</label>
+              <div className="inline-row">
+                <button className="secondary" onClick={inspectBatch} disabled={!job}>
+                  Load Batch
+                </button>
+                <button className="secondary" onClick={loadAttention} disabled={!job || !inspectData}>
+                  Load Attention
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {inspectData ? (
+            <div className="grid-2">
+              <div>
+                <label>Input Tokens</label>
+                <div className="card" style={{ boxShadow: "none", background: "rgba(255,255,255,0.55)" }}>
+                  <TokenRainbow tokens={inspectData.token_labels} />
+                </div>
+              </div>
+              <div>
+                <label>Target (Next Token)</label>
+                <div className="card" style={{ boxShadow: "none", background: "rgba(255,255,255,0.55)" }}>
+                  <p>{inspectData.target_token || "-"}</p>
+                  {inspectData.actual_rank !== null && inspectData.actual_rank !== undefined && (
+                    <p>
+                      Rank #{inspectData.actual_rank} • {((inspectData.actual_prob || 0) * 100).toFixed(2)}%
+                    </p>
+                  )}
+                  <div style={{ marginTop: 12 }}>
+                    {inspectData.top_predictions?.map((pred, idx) => (
+                      <div key={`${pred.token}-${idx}`} className="badge" style={{ marginRight: 8 }}>
+                        {pred.token} ({(pred.prob * 100).toFixed(1)}%)
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <p>Load a batch to inspect tokens and predictions.</p>
+          )}
+
+          <div style={{ marginTop: 16 }}>
+            <div className="grid-3">
+              <div>
+                <label>Layer</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={Math.max(0, modelConfig.n_layers - 1)}
+                  value={attnLayer}
+                  onChange={(event) => setAttnLayer(Number(event.target.value))}
+                />
+              </div>
+              <div>
+                <label>Head</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={Math.max(0, modelConfig.n_heads - 1)}
+                  value={attnHead}
+                  onChange={(event) => setAttnHead(Number(event.target.value))}
+                />
+              </div>
+            </div>
+            {attention.length > 0 ? (
+              <Heatmap matrix={attention} labels={inspectData?.token_labels || []} />
+            ) : (
+              <p style={{ marginTop: 8 }}>Load attention to visualize patterns.</p>
+            )}
+          </div>
         </div>
       </section>
 

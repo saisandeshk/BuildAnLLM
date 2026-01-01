@@ -42,6 +42,8 @@ export default function InferencePage() {
   const [snippets, setSnippets] = useState<CodeSnippet[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  const generatedCount = Math.max(0, generatedText.length - prompt.length);
+
   useEffect(() => {
     fetchJson<{ checkpoints: Checkpoint[] }>("/api/checkpoints")
       .then((data) => setCheckpoints(data.checkpoints))
@@ -185,6 +187,26 @@ export default function InferencePage() {
               <StatCard label="n_ctx" value={session.cfg?.n_ctx || "-"} />
             </div>
           )}
+          {session && (
+            <div style={{ marginTop: 16 }}>
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Config</th>
+                    <th>Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(session.cfg || {}).map(([key, value]) => (
+                    <tr key={key}>
+                      <td>{key}</td>
+                      <td>{String(value)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </section>
 
@@ -248,6 +270,11 @@ export default function InferencePage() {
         </div>
         <div className="card">
           <textarea value={generatedText} readOnly style={{ minHeight: 220 }} />
+          {generatedText && (
+            <p style={{ marginTop: 8 }}>
+              Prompt length {prompt.length} chars • Generated {generatedCount} chars
+            </p>
+          )}
         </div>
       </section>
 

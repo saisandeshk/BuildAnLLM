@@ -13,8 +13,9 @@ from fastapi.responses import StreamingResponse
 
 from backend.app.core.jobs import TrainingJob
 from backend.app.core.state import job_registry
-from backend.app.schemas.training import JobStatusResponse, JobStepRequest, PretrainJobPayload
+from backend.app.schemas.training import AttentionRequest, InspectRequest, JobStatusResponse, JobStepRequest, PretrainJobPayload
 from backend.app.services.model_config import build_model_config
+from backend.app.services.training_inspect import build_attention_map, build_pretrain_inspect
 from pretraining.data.dataset import TransformerDataset
 from pretraining.model.model import TransformerModel
 from pretraining.training.training_args import TransformerTrainingArgs
@@ -116,6 +117,41 @@ async def step_job(job_id: str, request: JobStepRequest) -> dict:
     if job.step >= job.trainer.max_iters:
         raise HTTPException(status_code=400, detail="Job already completed")
     return {"metrics": job.step_once(include_batch=request.include_batch)}
+
+
+@router.post("/jobs/{job_id}/inspect")
+async def inspect_job(job_id: str, request: InspectRequest) -> dict:
+    job = job_registry.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    try:
+        payload = build_pretrain_inspect(
+            job,
+            sample_index=request.sample_index,
+            max_tokens=request.max_tokens,
+            top_k=request.top_k,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return payload
+
+
+@router.post("/jobs/{job_id}/attention")
+async def attention_job(job_id: str, request: AttentionRequest) -> dict:
+    job = job_registry.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    try:
+        payload = build_attention_map(
+            job,
+            sample_index=request.sample_index,
+            layer=request.layer,
+            head=request.head,
+            max_tokens=request.max_tokens,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return payload
 
 
 @router.post("/jobs/{job_id}/pause")

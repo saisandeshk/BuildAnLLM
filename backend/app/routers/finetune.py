@@ -13,9 +13,10 @@ from fastapi.responses import StreamingResponse
 
 from backend.app.core.jobs import TrainingJob
 from backend.app.core.state import job_registry
-from backend.app.schemas.training import FinetuneJobPayload, JobStatusResponse, JobStepRequest
+from backend.app.schemas.training import AttentionRequest, FinetuneJobPayload, InspectRequest, JobStatusResponse, JobStepRequest
 from backend.app.services.checkpoints import resolve_checkpoint_path
 from backend.app.services.tokenizers import load_tokenizer_for_checkpoint
+from backend.app.services.training_inspect import build_attention_map, build_sft_inspect
 from config import PositionalEncoding
 from finetuning.data.sft_dataset import SFTDataset
 from finetuning.training.finetuning_args import FinetuningArgs
@@ -142,6 +143,7 @@ async def create_job(
         eval_interval=parsed.training.eval_interval,
         tokenizer_type=tokenizer_type,
     )
+    trainer.tokenizer = tokenizer
 
     job_id = uuid4().hex
     job = TrainingJob(
@@ -175,6 +177,40 @@ async def step_job(job_id: str, request: JobStepRequest) -> dict:
     if job.step >= job.trainer.max_iters:
         raise HTTPException(status_code=400, detail="Job already completed")
     return {"metrics": job.step_once(include_batch=request.include_batch)}
+
+
+@router.post("/jobs/{job_id}/inspect")
+async def inspect_job(job_id: str, request: InspectRequest) -> dict:
+    job = job_registry.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    try:
+        payload = build_sft_inspect(
+            job,
+            sample_index=request.sample_index,
+            max_tokens=request.max_tokens,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return payload
+
+
+@router.post("/jobs/{job_id}/attention")
+async def attention_job(job_id: str, request: AttentionRequest) -> dict:
+    job = job_registry.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    try:
+        payload = build_attention_map(
+            job,
+            sample_index=request.sample_index,
+            layer=request.layer,
+            head=request.head,
+            max_tokens=request.max_tokens,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return payload
 
 
 @router.post("/jobs/{job_id}/pause")

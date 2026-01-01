@@ -49,6 +49,7 @@ class TrainingJob:
     _run_event: threading.Event = field(default_factory=threading.Event)
     _stop_event: threading.Event = field(default_factory=threading.Event)
     _thread: Optional[threading.Thread] = None
+    last_metrics: Optional[Dict[str, Any]] = None
 
     def start(self, paused: bool = False) -> None:
         if self._thread and self._thread.is_alive():
@@ -87,6 +88,7 @@ class TrainingJob:
         with self.lock:
             metrics = self.trainer.train_single_step()
             self.step += 1
+            self.last_metrics = metrics
             payload = _serialize_metrics(metrics, include_batch=include_batch)
             payload["iter"] = self.step
             payload["max_iters"] = self.trainer.max_iters
@@ -108,6 +110,7 @@ class TrainingJob:
                 with self.lock:
                     metrics = self.trainer.train_single_step()
                     self.step += 1
+                    self.last_metrics = metrics
                     payload = _serialize_metrics(metrics, include_batch=False)
                     payload["iter"] = self.step
                     payload["max_iters"] = self.trainer.max_iters

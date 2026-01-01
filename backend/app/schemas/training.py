@@ -60,6 +60,23 @@ class JobStepRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+class InspectRequest(BaseModel):
+    sample_index: int = 0
+    max_tokens: int | None = None
+    top_k: int = 5
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class AttentionRequest(BaseModel):
+    sample_index: int = 0
+    layer: int
+    head: int
+    max_tokens: int | None = None
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class JobStatusResponse(BaseModel):
     job_id: str
     kind: str

@@ -17,7 +17,12 @@ export default function PlaygroundPage() {
 
   useEffect(() => {
     fetchJson<{ models: string[] }>("/api/tokenizers/tiktoken/models")
-      .then((data) => setModels(data.models))
+      .then((data) => {
+        setModels(data.models);
+        if (data.models.length > 0 && !data.models.includes(selectedModel)) {
+          setSelectedModel(data.models[0]);
+        }
+      })
       .catch((err) => setError((err as Error).message));
   }, []);
 

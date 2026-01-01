@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import CodePanel from "../../components/CodePanel";
+import Heatmap from "../../components/Heatmap";
 import LineChart from "../../components/LineChart";
 import StatCard from "../../components/StatCard";
+import TokenSegments from "../../components/TokenSegments";
 import { fetchJson, makeFormData, Checkpoint, CodeSnippet, JobStatus } from "../../lib/api";
 import { useSse } from "../../lib/useSse";
 import MarkdownBlock from "../../components/MarkdownBlock";
@@ -12,6 +14,7 @@ import { finetuneEquations, loraEquations } from "../../lib/equations";
 export default function FinetunePage() {
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
   const [selectedCheckpoint, setSelectedCheckpoint] = useState<string>("");
+  const [checkpointConfig, setCheckpointConfig] = useState<Record<string, number | string> | null>(null);
   const [method, setMethod] = useState<"full" | "lora">("full");
   const [loraConfig, setLoraConfig] = useState({
     lora_rank: 8,
@@ -20,6 +23,8 @@ export default function FinetunePage() {
     lora_target_modules: "all",
   });
   const [dataFile, setDataFile] = useState<File | null>(null);
+  const [csvPreview, setCsvPreview] = useState<string[][]>([]);
+  const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
   const [maxLength, setMaxLength] = useState(512);
   const [autoStart, setAutoStart] = useState(true);
   const [trainingParams, setTrainingParams] = useState({
@@ -39,12 +44,51 @@ export default function FinetunePage() {
   const [logs, setLogs] = useState<string[]>([]);
   const [snippets, setSnippets] = useState<CodeSnippet[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [inspectSample, setInspectSample] = useState(0);
+  const [inspectMaxTokens, setInspectMaxTokens] = useState(128);
+  const [inspectData, setInspectData] = useState<{
+    token_labels: string[];
+    prompt_tokens: string[];
+    response_tokens: string[];
+  } | null>(null);
+  const [attention, setAttention] = useState<number[][]>([]);
+  const [attnLayer, setAttnLayer] = useState(0);
+  const [attnHead, setAttnHead] = useState(0);
 
   useEffect(() => {
     fetchJson<{ checkpoints: Checkpoint[] }>("/api/checkpoints")
       .then((data) => setCheckpoints(data.checkpoints))
       .catch((err) => setError((err as Error).message));
   }, []);
+
+  useEffect(() => {
+    if (!selectedCheckpoint) {
+      setCheckpointConfig(null);
+      return;
+    }
+    fetchJson<{ cfg: Record<string, number | string> }>(
+      `/api/checkpoints/${encodeURIComponent(selectedCheckpoint)}`
+    )
+      .then((data) => setCheckpointConfig(data.cfg))
+      .catch((err) => setError((err as Error).message));
+  }, [selectedCheckpoint]);
+
+  useEffect(() => {
+    if (!dataFile) {
+      setCsvPreview([]);
+      setCsvHeaders([]);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = String(reader.result || "");
+      const lines = text.trim().split(/\r?\n/).slice(0, 6);
+      const rows = lines.map((line) => line.split(","));
+      setCsvHeaders(rows[0] || []);
+      setCsvPreview(rows.slice(1));
+    };
+    reader.readAsText(dataFile);
+  }, [dataFile]);
 
   const availableCheckpoints = useMemo(
     () => checkpoints.filter((ckpt) => !ckpt.is_finetuned),
@@ -77,6 +121,13 @@ export default function FinetunePage() {
       const payload = lastEvent.payload as { iter: number };
       setLogs((prev) => [`Checkpoint saved at ${payload.iter}`, ...prev].slice(0, 50));
     }
+    if (lastEvent.type === "eval") {
+      const payload = lastEvent.payload as { iter?: number; train_loss?: number; val_loss?: number };
+      const iter = payload.iter ?? "?";
+      const train = payload.train_loss?.toFixed?.(4) ?? "-";
+      const val = payload.val_loss?.toFixed?.(4) ?? "-";
+      setLogs((prev) => [`Eval @ ${iter}: train ${train}, val ${val}`, ...prev].slice(0, 50));
+    }
     if (lastEvent.type === "error") {
       const payload = lastEvent.payload as { message?: string };
       setError(payload?.message || "Fine-tuning error");
@@ -84,6 +135,8 @@ export default function FinetunePage() {
   }, [lastEvent]);
 
   const progress = job ? Math.min(job.iter / job.max_iters, 1) : 0;
+  const layersCount = checkpointConfig ? Number(checkpointConfig.n_layers || 0) : 0;
+  const headsCount = checkpointConfig ? Number(checkpointConfig.n_heads || 0) : 0;
 
   const createJob = async () => {
     setError(null);
@@ -109,6 +162,8 @@ export default function FinetunePage() {
       setLogs([]);
       setMetricsHistory([]);
       setEvalHistory([]);
+      setInspectData(null);
+      setAttention([]);
     } catch (err) {
       setError((err as Error).message);
     }
@@ -152,6 +207,52 @@ export default function FinetunePage() {
     }
   };
 
+  const inspectBatch = async () => {
+    if (!job) return;
+    setError(null);
+    try {
+      const data = await fetchJson<{
+        token_labels: string[];
+        prompt_tokens: string[];
+        response_tokens: string[];
+      }>(`/api/finetune/jobs/${job.job_id}/inspect`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sample_index: inspectSample,
+          max_tokens: inspectMaxTokens,
+        }),
+      });
+      setInspectData(data);
+      setAttention([]);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  const loadAttention = async () => {
+    if (!job) return;
+    setError(null);
+    try {
+      const data = await fetchJson<{ attention: number[][] }>(
+        `/api/finetune/jobs/${job.job_id}/attention`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sample_index: inspectSample,
+            max_tokens: inspectMaxTokens,
+            layer: attnLayer,
+            head: attnHead,
+          }),
+        }
+      );
+      setAttention(data.attention);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
   return (
     <>
       <section className="section">
@@ -171,6 +272,13 @@ export default function FinetunePage() {
               </option>
             ))}
           </select>
+          {checkpointConfig && (
+            <div className="grid-3" style={{ marginTop: 16 }}>
+              <StatCard label="d_model" value={checkpointConfig.d_model || "-"} />
+              <StatCard label="n_layers" value={checkpointConfig.n_layers || "-"} />
+              <StatCard label="n_heads" value={checkpointConfig.n_heads || "-"} />
+            </div>
+          )}
         </div>
       </section>
 
@@ -243,6 +351,11 @@ export default function FinetunePage() {
               </div>
             </div>
           )}
+          {method === "lora" && (
+            <div style={{ marginTop: 12 }} className="badge">
+              LoRA enabled · rank {loraConfig.lora_rank} · alpha {loraConfig.lora_alpha}
+            </div>
+          )}
         </div>
       </section>
 
@@ -257,6 +370,28 @@ export default function FinetunePage() {
             accept=".csv"
             onChange={(event) => setDataFile(event.target.files?.[0] || null)}
           />
+          {csvPreview.length > 0 && (
+            <div style={{ marginTop: 16 }}>
+              <table className="table">
+                <thead>
+                  <tr>
+                    {csvHeaders.map((header, idx) => (
+                      <th key={`${header}-${idx}`}>{header}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {csvPreview.map((row, rowIdx) => (
+                    <tr key={`row-${rowIdx}`}>
+                      {row.map((cell, cellIdx) => (
+                        <td key={`cell-${rowIdx}-${cellIdx}`}>{cell}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </section>
 
@@ -355,6 +490,11 @@ export default function FinetunePage() {
               </select>
             </div>
           </div>
+          <div className="grid-3" style={{ marginTop: 16 }}>
+            <StatCard label="Batch Size" value={trainingParams.batch_size} />
+            <StatCard label="Learning Rate" value={trainingParams.learning_rate} />
+            <StatCard label="Max Length" value={maxLength} />
+          </div>
         </div>
       </section>
 
@@ -420,6 +560,93 @@ export default function FinetunePage() {
               { dataKey: "running_loss", name: "Running Loss", color: "#0f4c5c" },
             ]}
           />
+        </div>
+      </section>
+
+      <section className="section">
+        <div className="section-title">
+          <h2>Inspect Batch</h2>
+          <p>Prompt vs response tokens and attention patterns.</p>
+        </div>
+        <div className="card">
+          <div className="grid-3" style={{ marginBottom: 12 }}>
+            <div>
+              <label>Sample Index</label>
+              <input
+                type="number"
+                value={inspectSample}
+                onChange={(event) => setInspectSample(Number(event.target.value))}
+              />
+            </div>
+            <div>
+              <label>Max Tokens</label>
+              <input
+                type="number"
+                value={inspectMaxTokens}
+                onChange={(event) => setInspectMaxTokens(Number(event.target.value))}
+              />
+            </div>
+            <div>
+              <label>Actions</label>
+              <div className="inline-row">
+                <button className="secondary" onClick={inspectBatch} disabled={!job}>
+                  Load Batch
+                </button>
+                <button className="secondary" onClick={loadAttention} disabled={!job || !inspectData}>
+                  Load Attention
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {inspectData ? (
+            <div className="grid-2">
+              <div>
+                <label>Prompt Tokens</label>
+                <div className="card" style={{ boxShadow: "none", background: "rgba(255,255,255,0.55)" }}>
+                  <TokenSegments tokens={inspectData.prompt_tokens} tone="prompt" />
+                </div>
+              </div>
+              <div>
+                <label>Response Tokens</label>
+                <div className="card" style={{ boxShadow: "none", background: "rgba(255,255,255,0.55)" }}>
+                  <TokenSegments tokens={inspectData.response_tokens} tone="response" />
+                </div>
+              </div>
+            </div>
+          ) : (
+            <p>Load a batch to inspect prompt/response tokens.</p>
+          )}
+
+          <div style={{ marginTop: 16 }}>
+            <div className="grid-3">
+              <div>
+                <label>Layer</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={layersCount ? Math.max(0, layersCount - 1) : undefined}
+                  value={attnLayer}
+                  onChange={(event) => setAttnLayer(Number(event.target.value))}
+                />
+              </div>
+              <div>
+                <label>Head</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={headsCount ? Math.max(0, headsCount - 1) : undefined}
+                  value={attnHead}
+                  onChange={(event) => setAttnHead(Number(event.target.value))}
+                />
+              </div>
+            </div>
+            {attention.length > 0 ? (
+              <Heatmap matrix={attention} labels={inspectData?.token_labels || []} />
+            ) : (
+              <p style={{ marginTop: 8 }}>Load attention to visualize patterns.</p>
+            )}
+          </div>
         </div>
       </section>
 

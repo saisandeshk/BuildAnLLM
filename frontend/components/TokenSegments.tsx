@@ -1,21 +1,25 @@
 "use client";
 
-import { useMemo } from "react";
+export default function TokenSegments({
+  tokens,
+  tone,
+}: {
+  tokens: string[];
+  tone: "prompt" | "response" | "neutral";
+}) {
+  const palette = {
+    prompt: "rgba(20, 33, 43, 0.12)",
+    response: "rgba(78, 205, 196, 0.35)",
+    neutral: "rgba(210, 75, 26, 0.2)",
+  } as const;
 
-function colorForIndex(idx: number) {
-  const hue = (idx * 47) % 360;
-  return `hsl(${hue}deg 70% 80%)`;
-}
-
-export default function TokenRainbow({ tokens }: { tokens: string[] }) {
-  const colors = useMemo(() => tokens.map((_, idx) => colorForIndex(idx)), [tokens]);
   return (
     <div style={{ lineHeight: 1.8, fontFamily: "JetBrains Mono, Courier New, monospace" }}>
       {tokens.map((token, idx) => (
         <span
           key={`${token}-${idx}`}
           style={{
-            background: colors[idx],
+            background: palette[tone],
             padding: "2px 6px",
             marginRight: 4,
             borderRadius: 6,
