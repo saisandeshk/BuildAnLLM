@@ -179,9 +179,13 @@ def _patch_attention_forward(attn_module):
             alibi_bias = self.alibi.get_bias(total_len, residual.device)  # [n_heads, total_len, total_len]
             attn_scores = attn_scores + alibi_bias.unsqueeze(0)[:, :, start_pos:start_pos+seq_len, :]
         
-        # Step 8: Apply causal mask
-        mask = torch.tril(torch.ones((seq_len, total_len), device=residual.device))
-        attn_scores = attn_scores.masked_fill(mask == 0, float("-inf"))
+        # Step 8: Apply causal mask (offset by start_pos when using cache)
+        positions_q = torch.arange(
+            start_pos, start_pos + seq_len, device=residual.device
+        )
+        positions_k = torch.arange(total_len, device=residual.device)
+        mask = positions_k <= positions_q.unsqueeze(1)
+        attn_scores = attn_scores.masked_fill(~mask, float("-inf"))
         
         # Step 9: Softmax
         attn_pattern = torch.softmax(attn_scores, dim=-1)
@@ -334,4 +338,3 @@ def count_lora_parameters(model: nn.Module) -> dict:
         'frozen': frozen_params,
         'total': total_params,
     }
-

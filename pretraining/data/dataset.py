@@ -66,6 +66,10 @@ class TransformerDataset:
         """Create (input, target) pairs where target is input shifted by 1"""
         block_size = self.cfg.n_ctx
         # self.data: [total_tokens] - flattened token sequence
+        if len(self.data) <= block_size:
+            raise ValueError(
+                f"Text too short to create sequences: need > {block_size} tokens, got {len(self.data)}."
+            )
         X = []
         Y = []
         for i in range(len(self.data) - block_size):
@@ -115,4 +119,3 @@ class TransformerDataset:
         print(
             f"Train: {len(self.X_train)} sequences, Val: {len(self.X_val)} sequences"
         )
-

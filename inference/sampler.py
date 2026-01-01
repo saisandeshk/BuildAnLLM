@@ -61,6 +61,10 @@ class TransformerSampler:
         Returns:
             Filtered logits [vocab_size] (unlikely tokens set to -inf)
         """
+        vocab_size = logits.size(-1)
+        if top_k <= 0:
+            return logits
+        top_k = min(top_k, vocab_size)
         # Get threshold: k-th highest logit value
         # topk_values: [top_k] - top k logit values
         # topk_values[..., -1] is the k-th highest (lowest of top k)
@@ -181,6 +185,13 @@ class TransformerSampler:
         Returns:
             Next token ID [1]
         """
+        if temperature <= 0:
+            if top_k is not None:
+                logits = self._apply_top_k(logits, top_k)
+            if top_p is not None:
+                logits = self._apply_top_p(logits, top_p)
+            return torch.argmax(logits, dim=-1, keepdim=True)
+
         # Apply temperature scaling
         # Formula: scaled_logits = logits / temperature
         # temperature < 1: more focused (deterministic)

@@ -137,6 +137,7 @@ class TestTransformerTrainer:
         assert "grad_norm" in metrics
         assert metrics["loss"] >= 0
         assert metrics["running_loss"] >= 0
+        assert pytest.approx(metrics["loss"], rel=1e-6) == metrics["running_loss"]
 
 
 @pytest.mark.integration
@@ -239,6 +240,39 @@ class TestSFTTrainer:
         loss = trainer._compute_masked_loss(logits, y_batch, masks_batch)
         assert isinstance(loss, torch.Tensor)
         assert loss.item() >= 0
+
+    def test_train_single_step(self, model_with_einops, finetuning_args, device):
+        """Test single SFT training step."""
+        batch_size, seq_len = 2, 10
+        X_train = torch.randint(
+            0, model_with_einops.cfg.d_vocab, (50, seq_len))
+        Y_train = torch.randint(
+            0, model_with_einops.cfg.d_vocab, (50, seq_len))
+        masks_train = torch.randint(0, 2, (50, seq_len)).float()
+        X_val = torch.randint(0, model_with_einops.cfg.d_vocab, (10, seq_len))
+        Y_val = torch.randint(0, model_with_einops.cfg.d_vocab, (10, seq_len))
+        masks_val = torch.randint(0, 2, (10, seq_len)).float()
+
+        trainer = SFTTrainer(
+            model=model_with_einops,
+            args=finetuning_args,
+            X_train=X_train,
+            Y_train=Y_train,
+            masks_train=masks_train,
+            X_val=X_val,
+            Y_val=Y_val,
+            masks_val=masks_val,
+            device=device
+        )
+
+        metrics = trainer.train_single_step()
+        assert isinstance(metrics, dict)
+        assert "loss" in metrics
+        assert "running_loss" in metrics
+        assert "grad_norm" in metrics
+        assert metrics["loss"] >= 0
+        assert metrics["running_loss"] >= 0
+        assert pytest.approx(metrics["loss"], rel=1e-6) == metrics["running_loss"]
 
     def test_estimate_loss(self, model_with_einops, finetuning_args, device):
         """Test SFT loss estimation."""

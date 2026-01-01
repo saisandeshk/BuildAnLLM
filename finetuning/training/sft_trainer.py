@@ -95,7 +95,7 @@ class SFTTrainer:
         self.max_iters = args.epochs * args.max_steps_per_epoch
 
         # Track running average of loss
-        self.running_loss = 0.0
+        self.running_loss = None
         self.loss_alpha = 0.99
 
         # Track losses for plotting
@@ -264,10 +264,13 @@ class SFTTrainer:
             self.optimizer.step()
 
             # Update running loss
-            self.running_loss = (
-                self.loss_alpha * self.running_loss
-                + (1 - self.loss_alpha) * loss.item()
-            )
+            if self.running_loss is None:
+                self.running_loss = loss.item()
+            else:
+                self.running_loss = (
+                    self.loss_alpha * self.running_loss
+                    + (1 - self.loss_alpha) * loss.item()
+                )
 
             # Update progress bar
             pbar.set_postfix({
@@ -411,7 +414,7 @@ class SFTTrainer:
         self.optimizer.step()
 
         # Update running loss
-        if self.running_loss == 0.0: # Initialize if 0 (start)
+        if self.running_loss is None:
             self.running_loss = loss.item()
         else:
             self.running_loss = (

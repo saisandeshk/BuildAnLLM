@@ -292,10 +292,14 @@ class Attention(nn.Module):
         # - Model should only use past context, not future tokens
         # - Training must match inference conditions
         # - Mask prevents attending to future positions
-        # mask: [seq_len, total_len] - lower triangular matrix
-        # mask[i, j] = 1 if j <= i (can attend), else 0 (cannot attend)
-        mask = torch.tril(torch.ones((seq_len, total_len), device=residual.device))
-        attn_scores = attn_scores.masked_fill(mask == 0, float("-inf"))
+        # mask: [seq_len, total_len] - allow attending to positions <= current absolute position
+        # When using cache, queries start at start_pos, so we must offset the mask.
+        positions_q = torch.arange(
+            start_pos, start_pos + seq_len, device=residual.device
+        )  # [seq_len]
+        positions_k = torch.arange(total_len, device=residual.device)  # [total_len]
+        mask = positions_k <= positions_q.unsqueeze(1)
+        attn_scores = attn_scores.masked_fill(~mask, float("-inf"))
 
         # Step 9: Apply softmax to get attention probabilities
         # Formula: attn_pattern = softmax(attn_scores)

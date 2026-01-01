@@ -83,6 +83,24 @@ class TestAttention:
         assert cache2[0].shape[1] == 6  # 5 + 1
         assert cache2[1].shape[1] == 6
 
+    def test_cache_matches_full_output(self, small_config, use_einops):
+        """Cached attention output should match full-sequence output for the last token."""
+        attn = Attention(small_config, rope=None, alibi=None, use_einops=use_einops)
+        attn.eval()
+        batch_size, seq_len = 2, 6
+        residual = torch.randn(batch_size, seq_len, small_config.d_model)
+
+        with torch.no_grad():
+            full_out, _ = attn(residual, cache=None, start_pos=0)
+            prefix = residual[:, :-1, :]
+            last = residual[:, -1:, :]
+            _, cache = attn(prefix, cache=None, start_pos=0)
+            cached_out, _ = attn(last, cache=cache, start_pos=seq_len - 1)
+
+        torch.testing.assert_close(
+            cached_out, full_out[:, -1:, :], rtol=1e-4, atol=1e-5
+        )
+
     def test_attention_pattern_sum_to_one(self, small_config, use_einops):
         """Test that attention patterns sum to 1."""
         attn = Attention(small_config, rope=None, alibi=None, use_einops=use_einops)
@@ -261,4 +279,3 @@ class TestAttentionEquivalence:
         output2, cache2 = attn2(residual)
         
         assert torch.allclose(output1, output2, atol=1e-5)
-

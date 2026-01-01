@@ -153,19 +153,28 @@ class SFTDataset:
                 prompt_len = len(prompt_tokens)
 
             # Pad or truncate to max_length
-            # mask: List[int] - 0 for prompt positions, 1 for response positions
+            # mask: List[int] - 0 for prompt positions (if masking), 1 for response positions
             if len(full_tokens) < self.max_length:
                 # Pad with 0 (adjust if your tokenizer has a special padding token)
                 padding = [0] * (self.max_length - len(full_tokens))
                 full_tokens = full_tokens + padding
-                # Mask: 0s for prompt, 1s for response, 0s for padding
-                mask = ([0] * prompt_len +
-                        [1] * (len(full_tokens) - prompt_len - len(padding)) +
-                        [0] * len(padding))
+                if self.mask_prompt:
+                    # Mask: 0s for prompt, 1s for response, 0s for padding
+                    mask = ([0] * prompt_len +
+                            [1] * (len(full_tokens) - prompt_len - len(padding)) +
+                            [0] * len(padding))
+                else:
+                    # Mask: 1s for prompt + response, 0s for padding
+                    mask = ([1] * (len(full_tokens) - len(padding)) +
+                            [0] * len(padding))
             else:
                 full_tokens = full_tokens[:self.max_length]
-                # Mask: 0s for prompt, 1s for response
-                mask = [0] * prompt_len + [1] * (len(full_tokens) - prompt_len)
+                if self.mask_prompt:
+                    # Mask: 0s for prompt, 1s for response
+                    mask = [0] * prompt_len + [1] * (len(full_tokens) - prompt_len)
+                else:
+                    # Mask: 1s for prompt + response
+                    mask = [1] * len(full_tokens)
                 mask = mask[:self.max_length]
 
             # Create input and target (shifted by 1, same as pre-training)
@@ -231,4 +240,3 @@ class SFTDataset:
         print(f"Max length: {self.max_length}")
         print(f"Train: {len(self.X_train)} sequences, Val: {len(self.X_val)} sequences")
         print(f"Mask prompt: {self.mask_prompt}")
-

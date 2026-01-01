@@ -215,8 +215,9 @@ def _log_checkpoint_saved(iter_num, shared_logs, lock):
 def _finalize_training(trainer, max_iters, training_active_flag,
                        shared_logs, progress_data, lock):
     """Finalize training and save results."""
+    running_loss = trainer.running_loss if trainer.running_loss is not None else 0.0
     print("\nTraining complete!")
-    print(f"Final running average loss: {trainer.running_loss:.4f}")
+    print(f"Final running average loss: {running_loss:.4f}")
 
     with lock:
         if training_active_flag[0]:
@@ -226,7 +227,7 @@ def _finalize_training(trainer, max_iters, training_active_flag,
                 trainer.save_loss_graph()
             shared_logs.append("Training complete!")
             shared_logs.append(
-                f"Final running average loss: {trainer.running_loss:.4f}")
+                f"Final running average loss: {running_loss:.4f}")
         training_active_flag[0] = False
         progress_data["iter"] = max_iters - 1
         progress_data["progress"] = 1.0

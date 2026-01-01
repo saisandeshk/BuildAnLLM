@@ -283,7 +283,7 @@ class TransformerModel(nn.Module):
             # pos_emb: [batch, position, d_model]
             # residual: [batch, position, d_model]
             # Add positional embeddings to token embeddings
-            residual = residual + self.pos_embed(tokens)
+            residual = residual + self.pos_embed(tokens, start_pos=start_pos)
 
         # Step 3: Pass through transformer blocks
         # Each block: [batch, position, d_model] -> [batch, position, d_model]

@@ -48,6 +48,26 @@ class TestTransformerSampler:
         assert next_token.shape == (1,)
         assert 0 <= next_token.item() < vocab_size
 
+    def test_generate_next_token_with_zero_temperature(self, model_with_einops, character_tokenizer, device):
+        """Temperature=0 should fall back to deterministic argmax."""
+        sampler = TransformerSampler(model_with_einops, character_tokenizer, device)
+        vocab_size = model_with_einops.cfg.d_vocab
+        logits = torch.randn(vocab_size)
+
+        next_token = sampler._generate_next_token(logits, temperature=0.0, top_k=None, top_p=None)
+        assert next_token.shape == (1,)
+        assert 0 <= next_token.item() < vocab_size
+
+    def test_apply_top_k_over_vocab(self, model_with_einops, character_tokenizer, device):
+        """Top-k larger than vocab should be clamped."""
+        sampler = TransformerSampler(model_with_einops, character_tokenizer, device)
+        vocab_size = model_with_einops.cfg.d_vocab
+        logits = torch.randn(vocab_size)
+
+        filtered = sampler._apply_top_k(logits, top_k=vocab_size + 10)
+        non_inf_count = (filtered != float("-inf")).sum().item()
+        assert non_inf_count == vocab_size
+
     def test_sample(self, model_with_einops, character_tokenizer, device):
         """Test text sampling."""
         sampler = TransformerSampler(model_with_einops, character_tokenizer, device)
@@ -94,4 +114,3 @@ class TestTransformerSampler:
         # Both should be valid tokens
         assert 0 <= token_low.item() < vocab_size
         assert 0 <= token_high.item() < vocab_size
-

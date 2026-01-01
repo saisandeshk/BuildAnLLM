@@ -83,12 +83,15 @@ class PosEmbed(nn.Module):
             return position_embeddings_with_batch_dim.expand(batch_size, -1, -1)
 
     def forward(
-        self, tokens: Int[Tensor, "batch position"]
+        self,
+        tokens: Int[Tensor, "batch position"],
+        start_pos: int = 0,
     ) -> Float[Tensor, "batch position d_model"]:
         """Forward pass through positional embedding layer.
         
         Args:
             tokens: Token IDs [batch, position] (used to get sequence length)
+            start_pos: Absolute starting position (used with KV cache)
         
         Returns:
             Positional embeddings [batch, position, d_model]
@@ -96,8 +99,8 @@ class PosEmbed(nn.Module):
         batch, seq_len = tokens.shape
         
         # Get embeddings for current sequence length
-        # W_pos[:seq_len]: [seq_len, d_model] - embeddings for positions 0 to seq_len-1
-        position_embeddings = self.W_pos[:seq_len]
+        # W_pos[start_pos:start_pos+seq_len]: [seq_len, d_model]
+        position_embeddings = self.W_pos[start_pos:start_pos + seq_len]
         
         # Broadcast to batch dimension
         return self._broadcast_embeddings(position_embeddings, batch)

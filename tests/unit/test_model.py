@@ -45,6 +45,28 @@ class TestTransformerModel:
         
         assert logits2.shape == (batch_size, 1, small_config.d_vocab)
 
+    def test_cache_matches_full_logits(self, small_config, use_einops):
+        """Cached logits should match full-sequence logits for the last token."""
+        model = TransformerModel(small_config, use_einops=use_einops)
+        model.eval()
+        batch_size, seq_len = 2, 6
+        tokens = torch.randint(0, small_config.d_vocab, (batch_size, seq_len))
+
+        with torch.no_grad():
+            result_full = model(tokens, cache=None, start_pos=0)
+            logits_full = result_full[0] if isinstance(result_full, tuple) else result_full
+
+            tokens_prefix = tokens[:, :-1]
+            tokens_last = tokens[:, -1:]
+            result_prefix = model(tokens_prefix, cache=None, start_pos=0)
+            logits_prefix, cache = result_prefix
+            result_cached = model(tokens_last, cache=cache, start_pos=seq_len - 1)
+            logits_cached = result_cached[0] if isinstance(result_cached, tuple) else result_cached
+
+        torch.testing.assert_close(
+            logits_cached, logits_full[:, -1:, :], rtol=1e-4, atol=1e-5
+        )
+
     def test_gradient_flow(self, small_config, sample_tokens, use_einops):
         """Test that gradients flow through model."""
         model = TransformerModel(small_config, use_einops=use_einops)
@@ -162,4 +184,3 @@ class TestAggregateAuxLosses:
         result = _aggregate_aux_losses(losses)
         # Should handle None gracefully
         assert result is not None
-

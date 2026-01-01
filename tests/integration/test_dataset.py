@@ -67,6 +67,12 @@ class TestTransformerDataset:
             assert dataset.tokenizer.vocab_size > 0
             assert len(dataset.X) > 0
 
+    def test_short_text_raises(self, small_config):
+        """Short texts should raise a clear error."""
+        short_text = "Too short."
+        with pytest.raises(ValueError, match="Text too short to create sequences"):
+            TransformerDataset(short_text, small_config, tokenizer_type="character")
+
 
 @pytest.mark.integration
 class TestSFTDataset:
@@ -110,6 +116,27 @@ class TestSFTDataset:
         assert (dataset.masks == 0).any()
         # Check that some tokens are not masked (response tokens)
         assert (dataset.masks == 1).any()
+
+    def test_mask_prompt_false(self, temp_checkpoint_dir, character_tokenizer):
+        """Test that prompt tokens are included when mask_prompt is False."""
+        import pandas as pd
+
+        prompt = "Prompt"
+        response = "Response"
+        csv_path = f"{temp_checkpoint_dir}/mask_prompt_false.csv"
+        pd.DataFrame({"prompt": [prompt], "response": [response]}).to_csv(
+            csv_path, index=False
+        )
+        max_length = len(character_tokenizer.encode(prompt)) + len(
+            character_tokenizer.encode(response)
+        )
+        dataset = SFTDataset(
+            csv_path,
+            character_tokenizer,
+            max_length=max_length,
+            mask_prompt=False,
+        )
+        assert torch.all(dataset.masks == 1)
 
     def test_split_data(self, sample_csv_file, character_tokenizer):
         """Test data splitting."""
@@ -173,4 +200,3 @@ class TestSFTDataset:
         
         dataset = SFTDataset(csv_path, character_tokenizer, max_length=50)
         assert len(dataset.X) > 0
-

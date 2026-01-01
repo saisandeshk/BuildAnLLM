@@ -230,16 +230,15 @@ class TestALiBi:
         distance = alibi._compute_distance_matrix(seq_len, device)
         bias = alibi._apply_slopes(distance)
         masked_bias = alibi._apply_causal_mask(bias, seq_len, device)
-        
-        # Check that past/current positions (j <= i) have bias = 0
+
+        assert torch.allclose(masked_bias, bias, atol=1e-6)
+
+        # Diagonal should be zero, off-diagonal should be negative.
         for i in range(seq_len):
-            for j in range(i + 1):
-                assert torch.allclose(masked_bias[:, i, j], torch.zeros(olmo_config.n_heads), atol=1e-5)
-        
-        # Check that future positions (j > i) have negative bias
-        for i in range(seq_len):
-            for j in range(i + 1, seq_len):
-                assert torch.all(masked_bias[:, i, j] < 0)
+            assert torch.allclose(masked_bias[:, i, i], torch.zeros(olmo_config.n_heads), atol=1e-5)
+            for j in range(seq_len):
+                if i != j:
+                    assert torch.all(masked_bias[:, i, j] < 0)
 
     def test_get_bias(self, olmo_config, device):
         """Test get_bias method."""
@@ -248,10 +247,12 @@ class TestALiBi:
         bias = alibi.get_bias(seq_len, device)
         assert bias.shape == (olmo_config.n_heads, seq_len, seq_len)
         
-        # Check causal masking
+        # Diagonal should be zero, off-diagonal should be negative.
         for i in range(seq_len):
-            for j in range(i + 1):
-                assert torch.allclose(bias[:, i, j], torch.zeros(olmo_config.n_heads), atol=1e-5)
+            assert torch.allclose(bias[:, i, i], torch.zeros(olmo_config.n_heads), atol=1e-5)
+            for j in range(seq_len):
+                if i != j:
+                    assert torch.all(bias[:, i, j] < 0)
 
     def test_different_sequence_lengths(self, olmo_config, device):
         """Test with different sequence lengths."""
@@ -284,4 +285,3 @@ class TestALiBi:
             head1_bias = bias[1]  # [seq_len, seq_len]
             # They should differ for future positions (first row, positions after 0)
             assert not torch.allclose(head0_bias[0, 1:], head1_bias[0, 1:], atol=1e-5)
-
