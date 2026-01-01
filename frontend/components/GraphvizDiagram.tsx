@@ -40,7 +40,7 @@ export default function GraphvizDiagram({ dot }: { dot: string }) {
   return (
     <div
       className="card"
-      style={{ boxShadow: "none", background: "rgba(255,255,255,0.55)" }}
+      style={{ boxShadow: "none", background: "var(--card-muted)" }}
       dangerouslySetInnerHTML={{ __html: svg }}
     />
   );

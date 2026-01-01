@@ -94,7 +94,7 @@ export default function PlaygroundPage() {
             </div>
             <div>
               <label>Tokens</label>
-              <div className="card" style={{ boxShadow: "none", background: "rgba(255,255,255,0.55)" }}>
+              <div className="card" style={{ boxShadow: "none", background: "var(--card-muted)" }}>
                 {decodedTokens.length > 0 ? (
                   <TokenRainbow tokens={decodedTokens} />
                 ) : (

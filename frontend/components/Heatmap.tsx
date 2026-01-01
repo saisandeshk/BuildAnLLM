@@ -39,7 +39,7 @@ export default function Heatmap({
       }
     }
 
-    ctx.strokeStyle = "rgba(0,0,0,0.15)";
+    ctx.strokeStyle = "rgba(255,255,255,0.08)";
     for (let i = 0; i <= size; i += 1) {
       ctx.beginPath();
       ctx.moveTo(0, i * cell);

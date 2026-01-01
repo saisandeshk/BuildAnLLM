@@ -676,8 +676,8 @@ export default function FinetunePage() {
             }))}
             xKey="iter"
             lines={[
-              { dataKey: "loss", name: "Loss", color: "#d24b1a" },
-              { dataKey: "running_loss", name: "Running Loss", color: "#0f4c5c" },
+              { dataKey: "loss", name: "Loss", color: "var(--accent)" },
+              { dataKey: "running_loss", name: "Running Loss", color: "var(--accent-2)" },
             ]}
           />
         </div>
@@ -726,13 +726,13 @@ export default function FinetunePage() {
             <div className="grid-2">
               <div>
                 <label>Prompt Tokens</label>
-                <div className="card" style={{ boxShadow: "none", background: "rgba(255,255,255,0.55)" }}>
+                <div className="card" style={{ boxShadow: "none", background: "var(--card-muted)" }}>
                   <TokenSegments tokens={inspectData.prompt_tokens} tone="prompt" />
                 </div>
               </div>
               <div>
                 <label>Response Tokens</label>
-                <div className="card" style={{ boxShadow: "none", background: "rgba(255,255,255,0.55)" }}>
+                <div className="card" style={{ boxShadow: "none", background: "var(--card-muted)" }}>
                   <TokenSegments tokens={inspectData.response_tokens} tone="response" />
                 </div>
               </div>
@@ -787,8 +787,8 @@ export default function FinetunePage() {
             }))}
             xKey="iter"
             lines={[
-              { dataKey: "train", name: "Train Loss", color: "#1b6ca8" },
-              { dataKey: "val", name: "Val Loss", color: "#a00f24" },
+              { dataKey: "train", name: "Train Loss", color: "var(--accent)" },
+              { dataKey: "val", name: "Val Loss", color: "#fbbf24" },
             ]}
           />
         </div>

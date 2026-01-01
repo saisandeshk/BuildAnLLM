@@ -10,7 +10,7 @@ function colorForIndex(idx: number) {
 export default function TokenRainbow({ tokens }: { tokens: string[] }) {
   const colors = useMemo(() => tokens.map((_, idx) => colorForIndex(idx)), [tokens]);
   return (
-    <div style={{ lineHeight: 1.8, fontFamily: "JetBrains Mono, Courier New, monospace" }}>
+    <div style={{ lineHeight: 1.8, fontFamily: "var(--font-mono), IBM Plex Mono, SFMono-Regular, Menlo, monospace" }}>
       {tokens.map((token, idx) => (
         <span
           key={`${token}-${idx}`}
@@ -20,6 +20,7 @@ export default function TokenRainbow({ tokens }: { tokens: string[] }) {
             marginRight: 4,
             borderRadius: 6,
             display: "inline-block",
+            color: "#0b0b0c",
           }}
         >
           {token || " "}

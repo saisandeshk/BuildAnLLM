@@ -5,11 +5,12 @@ export function generateGraphvizArchitecture(config: ModelConfig) {
   const posEnc = config.positional_encoding || "learned";
   const activation = config.activation || "gelu";
 
-  const colorBoxFill = "#E6DAC3";
-  const colorBoxBorder = "#5C5248";
-  const colorText = "#4A4A4A";
-  const fontMain = "Helvetica";
-  const fontMath = "Times-Roman";
+  const colorBoxFill = "#14161b";
+  const colorBoxBorder = "#f97316";
+  const colorText = "#f5f5f5";
+  const colorSubtle = "#9ca3af";
+  const fontMain = "IBM Plex Sans";
+  const fontMath = "IBM Plex Mono";
 
   const dot: string[] = [];
   dot.push("digraph TransformerArchitecture {");
@@ -26,8 +27,8 @@ export function generateGraphvizArchitecture(config: ModelConfig) {
   const makeNoteLabel = (text: string, subtext = "") => {
     return `<
         <TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0">
-        <TR><TD ALIGN="LEFT"><FONT POINT-SIZE="12" FACE="${fontMain}">${text}</FONT></TD></TR>
-        <TR><TD ALIGN="LEFT"><FONT POINT-SIZE="14" FACE="${fontMath}"><i>${subtext}</i></FONT></TD></TR>
+        <TR><TD ALIGN="LEFT"><FONT POINT-SIZE="12" FACE="${fontMain}" COLOR="${colorText}">${text}</FONT></TD></TR>
+        <TR><TD ALIGN="LEFT"><FONT POINT-SIZE="14" FACE="${fontMath}" COLOR="${colorSubtle}"><i>${subtext}</i></FONT></TD></TR>
         </TABLE>
         >`;
   };
@@ -67,9 +68,9 @@ export function generateGraphvizArchitecture(config: ModelConfig) {
 
   dot.push("    subgraph cluster_residual {");
   dot.push('        label="One residual block (repeated)";');
-  dot.push('        fontcolor="#888888";');
+  dot.push(`        fontcolor="${colorSubtle}";`);
   dot.push("        style=dashed;");
-  dot.push('        color="#888888";');
+  dot.push(`        color="${colorSubtle}";`);
   dot.push("        margin=20;");
 
   dot.push('        x0 [shape=plaintext, style=none, label=<<i>x</i><sub>0</sub>>, group=main];');

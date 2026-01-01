@@ -330,7 +330,7 @@ export default function InferencePage() {
 
               <div style={{ marginTop: 24 }}>
                 <h3>Logit Lens</h3>
-                <div className="card" style={{ boxShadow: "none", background: "rgba(255,255,255,0.55)" }}>
+                <div className="card" style={{ boxShadow: "none", background: "var(--card-muted)" }}>
                   {logitLens.length === 0 ? (
                     <p>Loading logit lens...</p>
                   ) : (
@@ -365,7 +365,7 @@ export default function InferencePage() {
                 <LineChart
                   data={layerNorms.map((row) => ({ layer: row.layer, norm: row.avg_norm }))}
                   xKey="layer"
-                  lines={[{ dataKey: "norm", name: "Avg Norm", color: "#0f4c5c" }]}
+                  lines={[{ dataKey: "norm", name: "Avg Norm", color: "var(--accent)" }]}
                 />
               </div>
             </>

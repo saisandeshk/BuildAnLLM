@@ -1,19 +1,20 @@
 import "katex/dist/katex.min.css";
 import "./globals.css";
 import type { ReactNode } from "react";
-import { Space_Grotesk, Spectral } from "next/font/google";
+import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import Nav from "../components/Nav";
 
-const spaceGrotesk = Space_Grotesk({
+const plexSans = IBM_Plex_Sans({
   subsets: ["latin"],
-  variable: "--font-space",
+  weight: ["300", "400", "500", "600", "700"],
+  variable: "--font-sans",
   display: "swap",
 });
 
-const spectral = Spectral({
+const plexMono = IBM_Plex_Mono({
   subsets: ["latin"],
-  weight: ["400", "600", "700"],
-  variable: "--font-spectral",
+  weight: ["400", "500", "600"],
+  variable: "--font-mono",
   display: "swap",
 });
 
@@ -24,7 +25,7 @@ export const metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={`${spaceGrotesk.variable} ${spectral.variable}`}>
+    <html lang="en" className={`${plexSans.variable} ${plexMono.variable}`}>
       <body>
         <header className="site-header">
           <div className="brand">

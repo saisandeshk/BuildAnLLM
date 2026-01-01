@@ -8,13 +8,13 @@ export default function TokenSegments({
   tone: "prompt" | "response" | "neutral";
 }) {
   const palette = {
-    prompt: "rgba(20, 33, 43, 0.12)",
-    response: "rgba(78, 205, 196, 0.35)",
-    neutral: "rgba(210, 75, 26, 0.2)",
+    prompt: "rgba(255, 255, 255, 0.08)",
+    response: "rgba(249, 115, 22, 0.3)",
+    neutral: "rgba(249, 115, 22, 0.18)",
   } as const;
 
   return (
-    <div style={{ lineHeight: 1.8, fontFamily: "JetBrains Mono, Courier New, monospace" }}>
+    <div style={{ lineHeight: 1.8, fontFamily: "var(--font-mono), IBM Plex Mono, SFMono-Regular, Menlo, monospace" }}>
       {tokens.map((token, idx) => (
         <span
           key={`${token}-${idx}`}

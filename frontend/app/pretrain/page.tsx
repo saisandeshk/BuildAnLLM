@@ -881,8 +881,8 @@ export default function PretrainPage() {
             }))}
             xKey="iter"
             lines={[
-              { dataKey: "loss", name: "Loss", color: "#d24b1a" },
-              { dataKey: "running_loss", name: "Running Loss", color: "#0f4c5c" },
+              { dataKey: "loss", name: "Loss", color: "var(--accent)" },
+              { dataKey: "running_loss", name: "Running Loss", color: "var(--accent-2)" },
             ]}
           />
         </div>
@@ -931,13 +931,13 @@ export default function PretrainPage() {
             <div className="grid-2">
               <div>
                 <label>Input Tokens</label>
-                <div className="card" style={{ boxShadow: "none", background: "rgba(255,255,255,0.55)" }}>
+                <div className="card" style={{ boxShadow: "none", background: "var(--card-muted)" }}>
                   <TokenRainbow tokens={inspectData.token_labels} />
                 </div>
               </div>
               <div>
                 <label>Target (Next Token)</label>
-                <div className="card" style={{ boxShadow: "none", background: "rgba(255,255,255,0.55)" }}>
+                <div className="card" style={{ boxShadow: "none", background: "var(--card-muted)" }}>
                   <p>{inspectData.target_token || "-"}</p>
                   {inspectData.actual_rank !== null && inspectData.actual_rank !== undefined && (
                     <p>
@@ -1004,8 +1004,8 @@ export default function PretrainPage() {
             }))}
             xKey="iter"
             lines={[
-              { dataKey: "train", name: "Train Loss", color: "#1b6ca8" },
-              { dataKey: "val", name: "Val Loss", color: "#a00f24" },
+              { dataKey: "train", name: "Train Loss", color: "var(--accent)" },
+              { dataKey: "val", name: "Val Loss", color: "#fbbf24" },
             ]}
           />
         </div>
