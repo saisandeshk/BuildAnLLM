@@ -1,4 +1,4 @@
-import { defineConfig } from "vitest/config";
+import { defineConfig, configDefaults } from "vitest/config";
 
 export default defineConfig({
   esbuild: {
@@ -9,5 +9,6 @@ export default defineConfig({
     setupFiles: ["./test/setup.ts"],
     globals: true,
     clearMocks: true,
+    exclude: [...configDefaults.exclude, "e2e/**"],
   },
 });
