@@ -447,7 +447,7 @@ export default function PretrainPage() {
       <section id="architecture" className="section scroll-section">
         <div className="section-title">
           <h2>Architecture</h2>
-          <p>Select a preset and/or go deeper with architecutre settings.</p>
+          <p>Select a preset and/or go deeper with architecture settings.</p>
         </div>
         <div className="card">
           <div className="row-label" style={{ marginBottom: 12 }}>

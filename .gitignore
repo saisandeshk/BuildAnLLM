@@ -28,3 +28,6 @@ dist/
 # Tooling output
 .cache/
 .net/
+
+# Tests
+.hypothesis/

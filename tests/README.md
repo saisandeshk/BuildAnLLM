@@ -4,10 +4,23 @@ Comprehensive pytest test suite covering all functions in the transformer traini
 
 ## Running Tests
 
+### Install Test Dependencies
+
+```bash
+# Using uv (recommended)
+uv sync --extra test
+
+# Using pip/venv
+python -m pip install -e ".[test]"
+```
+
 ### Run All Tests
 
 ```bash
 pytest
+
+# Or with uv
+uv run pytest
 ```
 
 ### Run with Coverage
@@ -75,4 +88,4 @@ Shared fixtures are defined in `conftest.py`:
 - Random seeds are set for reproducibility
 - Tests use small model configs for fast execution
 - All tests are isolated (no shared state)
-
+- Property tests use Hypothesis; FastAPI endpoint tests use TestClient (httpx)
