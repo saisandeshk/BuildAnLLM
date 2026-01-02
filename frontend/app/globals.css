@@ -112,6 +112,64 @@ nav.primary a:hover {
   color: var(--accent);
 }
 
+.nav-dropdown {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.nav-dropdown-trigger {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--stroke);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+
+.nav-dropdown-trigger:hover,
+.nav-dropdown-trigger:focus-visible,
+.nav-dropdown.active .nav-dropdown-trigger {
+  border-color: var(--stroke-strong);
+  background: rgba(249, 115, 22, 0.08);
+  color: var(--accent);
+}
+
+.nav-dropdown-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  width: max-content;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--stroke);
+  border-radius: 12px;
+  background: rgba(8, 8, 10, 0.98);
+  box-shadow: var(--shadow);
+  display: none;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 20;
+}
+
+.nav-dropdown:hover .nav-dropdown-menu,
+.nav-dropdown:focus-within .nav-dropdown-menu {
+  display: flex;
+}
+
+.nav-dropdown-menu a {
+  width: auto;
+  align-self: flex-start;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
 .page-with-nav {
   display: grid;
   grid-template-columns: minmax(180px, 220px) minmax(0, 1fr);

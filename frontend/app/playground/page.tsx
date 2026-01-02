@@ -59,7 +59,7 @@ export default function PlaygroundPage() {
     <>
       <section className="section">
         <div className="section-title">
-          <h2>Tokenizer Playground</h2>
+          <h2>Tokenizer</h2>
           <p>Inspect how different models split input text.</p>
         </div>
         <div className="card">

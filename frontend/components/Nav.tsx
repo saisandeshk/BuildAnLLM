@@ -9,11 +9,13 @@ const links = [
   { href: "/pretrain", label: "Pre-Training" },
   { href: "/finetune", label: "Fine-Tuning" },
   { href: "/inference", label: "Inference" },
-  { href: "/playground", label: "Playground" },
 ];
+
+const playgroundItems = [{ href: "/playground", label: "Tokenizer" }];
 
 export default function Nav() {
   const pathname = usePathname();
+  const isPlaygroundActive = pathname.startsWith("/playground");
 
   return (
     <nav className="primary">
@@ -28,6 +30,24 @@ export default function Nav() {
           {link.label}
         </Link>
       ))}
+      <div className={clsx("nav-dropdown", { active: isPlaygroundActive })}>
+        <button type="button" className={clsx("nav-dropdown-trigger", { active: isPlaygroundActive })}>
+          Playground
+        </button>
+        <div className="nav-dropdown-menu">
+          {playgroundItems.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={clsx("nav-dropdown-item", {
+                active: pathname === item.href,
+              })}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </div>
+      </div>
     </nav>
   );
 }
