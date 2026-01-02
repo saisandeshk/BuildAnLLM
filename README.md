@@ -32,11 +32,13 @@ The following command will install `uv` and run the app:
 If running locally isn't an option, I'd suggest [RunPod](https://runpod.io?ref=avnw83xb):
 
 - Create a new pod.
-- Press 'Edit Template' and add `8501` to the list of exposed HTTP ports.
+- Press 'Edit Template' and add `3000` and `8000` to the list of exposed HTTP ports.
 - (You may want to increase the persistent disk space (Volume Disk).)
 - Click, "Set Overrides," and, "Deploy On-Demand," and wait for the deployment to complete.
 - You'll then want to SSH into the instance, either via the browser or in your own terminal, as per the given instructions.
-- Once you're in, you'll need to run `git clone https://github.com/jammastergirish/BuildAnLLM && cd BuildAnLLM && ./run_runpod.sh`, which will clone the repository, install `uv`, and run the project.
+- Once you're in, you'll need to run `git clone https://github.com/jammastergirish/BuildAnLLM && cd BuildAnLLM`.
+- Set the backend URL for the frontend (replace with your RunPod host): `export NEXT_PUBLIC_API_BASE_URL="https://<your-pod-host>:8000"`.
+- Run `./run.sh`, which will install `uv`, start FastAPI, and launch the Next.js frontend.
 - You can then see the web app in your browser via instructions in the Connect panel at RunPod.
 
 ## What You'll Learn
@@ -72,10 +74,10 @@ The codebase includes both educational implementations (showing the math and ope
 
 ### Getting Started
 
-This project is a **Streamlit web application** that provides an interactive interface for training and inference.
+This project is a **FastAPI + Next.js web application** that provides an interactive interface for training and inference.
 
 The app will open in your browser with the following pages:
-- **Main**: Overview and this README
+- **Overview**: System details and this README
 - **Pre-Training Page**: Configure and pre-train models with a visual interface
 - **Fine-Tuning Page**: Fine-tune pre-trained models on prompt/response pairs
 - **Inference Page**: Generate text from trained models (pre-trained or fine-tuned)
@@ -1526,4 +1528,5 @@ def forward(self, tokens):
 ### Documentation
 - [PyTorch](https://docs.pytorch.org/docs/stable/index.html)
 - [Einops](https://einops.rocks/)
-- [Streamlit](https://docs.streamlit.io/)
+- [FastAPI](https://fastapi.tiangolo.com/)
+- [Next.js](https://nextjs.org/docs)

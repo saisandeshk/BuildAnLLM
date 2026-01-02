@@ -1,7 +1,7 @@
 [project]
 name = "transformer-training"
 version = "0.1.0"
-description = "Transformer training and inference with Streamlit UI"
+description = "Transformer training and inference with FastAPI + Next.js UI"
 requires-python = ">=3.10"
 dependencies = [
     "torch>=2.0.0",
@@ -12,10 +12,7 @@ dependencies = [
     "sentencepiece>=0.1.99",
     "tqdm>=4.65.0",
     "matplotlib>=3.7.0",
-    "streamlit>=1.28.0",
-    "plotly>=5.17.0",
     "pandas>=2.0.0",
-    "graphviz>=0.21",
     "psutil>=7.2.0",
     "fastapi>=0.110.0",
     "uvicorn[standard]>=0.29.0",
