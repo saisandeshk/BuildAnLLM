@@ -24,6 +24,19 @@ type MetricsPayload = {
   eta_seconds?: number;
 };
 
+const finetuneSections = [
+  { id: "checkpoint", label: "Checkpoint" },
+  { id: "method", label: "Method" },
+  { id: "training-data", label: "Training data" },
+  { id: "hyperparameters", label: "Hyperparameters" },
+  { id: "understand", label: "Understand" },
+  { id: "train", label: "Train" },
+  { id: "metrics", label: "Metrics" },
+  { id: "inspect-batch", label: "Inspect batch" },
+  { id: "eval-history", label: "Eval history" },
+  { id: "logs", label: "Logs" },
+];
+
 export default function FinetunePage() {
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
   const [selectedCheckpoint, setSelectedCheckpoint] = useState<string>("");
@@ -58,6 +71,7 @@ export default function FinetunePage() {
   const [snippets, setSnippets] = useState<CodeSnippet[]>([]);
   const [snippetsLoading, setSnippetsLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [activeSection, setActiveSection] = useState(finetuneSections[0].id);
   const [error, setError] = useState<string | null>(null);
   const [inspectSample, setInspectSample] = useState(0);
   const [inspectData, setInspectData] = useState<{
@@ -186,6 +200,27 @@ export default function FinetunePage() {
       setError(sseError);
     }
   }, [sseError]);
+
+  useEffect(() => {
+    const elements = finetuneSections
+      .map((section) => document.getElementById(section.id))
+      .filter((element): element is HTMLElement => Boolean(element));
+    if (elements.length === 0) {
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            setActiveSection(entry.target.id);
+          }
+        });
+      },
+      { rootMargin: "-30% 0px -60% 0px" }
+    );
+    elements.forEach((element) => observer.observe(element));
+    return () => observer.disconnect();
+  }, []);
 
   const isRunning = job?.status === "running";
   const isPaused = job?.status === "paused";
@@ -403,8 +438,25 @@ export default function FinetunePage() {
   }, [attnLayer, attnHead, job, isRunning, inspectData]);
 
   return (
-    <>
-      <section className="section">
+    <div className="page-with-nav">
+      <nav className="side-nav" aria-label="Fine-tuning sections">
+        <div className="side-nav-title">Jump to</div>
+        <div className="side-nav-links">
+          {finetuneSections.map((section) => (
+            <a
+              key={section.id}
+              href={`#${section.id}`}
+              className={activeSection === section.id ? "active" : ""}
+              aria-current={activeSection === section.id ? "location" : undefined}
+              onClick={() => setActiveSection(section.id)}
+            >
+              {section.label}
+            </a>
+          ))}
+        </div>
+      </nav>
+      <div className="page-content">
+        <section id="checkpoint" className="section scroll-section">
         <div className="section-title">
           <h2>Select Checkpoint</h2>
           <p>Pick a pre-trained checkpoint to fine-tune.</p>
@@ -431,9 +483,9 @@ export default function FinetunePage() {
         </div>
       </section>
 
-      <section className="section">
+      <section id="method" className="section scroll-section">
         <div className="section-title">
-          <h2>Fine-Tuning Method</h2>
+          <h2>Method</h2>
           <p>Full parameter or LoRA.</p>
         </div>
         <div className="card">
@@ -508,7 +560,7 @@ export default function FinetunePage() {
         </div>
       </section>
 
-      <section className="section">
+      <section id="training-data" className="section scroll-section">
         <div className="section-title">
           <h2>Training Data</h2>
           <p>Upload a CSV or fall back to finetuning.csv.</p>
@@ -544,101 +596,122 @@ export default function FinetunePage() {
         </div>
       </section>
 
-      <section className="section">
+      <section id="hyperparameters" className="section scroll-section">
         <div className="section-title">
           <h2>Hyperparameters</h2>
           <p>Optimize fine-tuning behavior.</p>
         </div>
         <div className="card">
-          <div className="grid-3">
-            <div>
-              <label>Batch Size</label>
-              <input
-                type="number"
-                value={trainingParams.batch_size}
-                onChange={(event) =>
-                  setTrainingParams((prev) => ({ ...prev, batch_size: Number(event.target.value) }))
-                }
-              />
+          <details className="expander">
+            <summary>Core Settings</summary>
+            <div className="expander-content">
+              <div className="grid-3">
+                <div>
+                  <label>Batch Size</label>
+                  <input
+                    type="number"
+                    value={trainingParams.batch_size}
+                    onChange={(event) =>
+                      setTrainingParams((prev) => ({ ...prev, batch_size: Number(event.target.value) }))
+                    }
+                  />
+                </div>
+                <div>
+                  <label>Epochs</label>
+                  <input
+                    type="number"
+                    value={trainingParams.epochs}
+                    onChange={(event) =>
+                      setTrainingParams((prev) => ({ ...prev, epochs: Number(event.target.value) }))
+                    }
+                  />
+                </div>
+                <div>
+                  <label>Max Steps/Epoch</label>
+                  <input
+                    type="number"
+                    value={trainingParams.max_steps_per_epoch}
+                    onChange={(event) =>
+                      setTrainingParams((prev) => ({ ...prev, max_steps_per_epoch: Number(event.target.value) }))
+                    }
+                  />
+                </div>
+                <div>
+                  <label>Max Length</label>
+                  <input
+                    type="number"
+                    value={maxLength}
+                    onChange={(event) => setMaxLength(Number(event.target.value))}
+                  />
+                </div>
+              </div>
             </div>
-            <div>
-              <label>Epochs</label>
-              <input
-                type="number"
-                value={trainingParams.epochs}
-                onChange={(event) =>
-                  setTrainingParams((prev) => ({ ...prev, epochs: Number(event.target.value) }))
-                }
-              />
+          </details>
+
+          <details className="expander">
+            <summary>Optimization</summary>
+            <div className="expander-content">
+              <div className="grid-3">
+                <div>
+                  <label>Learning Rate</label>
+                  <input
+                    type="number"
+                    step="0.000001"
+                    value={trainingParams.learning_rate}
+                    onChange={(event) =>
+                      setTrainingParams((prev) => ({ ...prev, learning_rate: Number(event.target.value) }))
+                    }
+                  />
+                </div>
+                <div>
+                  <label>Weight Decay</label>
+                  <input
+                    type="number"
+                    step="0.0001"
+                    value={trainingParams.weight_decay}
+                    onChange={(event) =>
+                      setTrainingParams((prev) => ({ ...prev, weight_decay: Number(event.target.value) }))
+                    }
+                  />
+                </div>
+              </div>
             </div>
-            <div>
-              <label>Max Steps/Epoch</label>
-              <input
-                type="number"
-                value={trainingParams.max_steps_per_epoch}
-                onChange={(event) =>
-                  setTrainingParams((prev) => ({ ...prev, max_steps_per_epoch: Number(event.target.value) }))
-                }
-              />
+          </details>
+
+          <details className="expander">
+            <summary>Evaluation & Checkpointing</summary>
+            <div className="expander-content">
+              <div className="grid-3">
+                <div>
+                  <label>Eval Interval</label>
+                  <input
+                    type="number"
+                    value={trainingParams.eval_interval}
+                    onChange={(event) =>
+                      setTrainingParams((prev) => ({ ...prev, eval_interval: Number(event.target.value) }))
+                    }
+                  />
+                </div>
+                <div>
+                  <label>Save Interval</label>
+                  <input
+                    type="number"
+                    value={trainingParams.save_interval}
+                    onChange={(event) =>
+                      setTrainingParams((prev) => ({ ...prev, save_interval: Number(event.target.value) }))
+                    }
+                  />
+                </div>
+                <div>
+                  <label>Auto Start</label>
+                  <select value={autoStart ? "yes" : "no"} onChange={(event) => setAutoStart(event.target.value === "yes")}>
+                    <option value="yes">Yes</option>
+                    <option value="no">No</option>
+                  </select>
+                </div>
+              </div>
             </div>
-            <div>
-              <label>Learning Rate</label>
-              <input
-                type="number"
-                step="0.000001"
-                value={trainingParams.learning_rate}
-                onChange={(event) =>
-                  setTrainingParams((prev) => ({ ...prev, learning_rate: Number(event.target.value) }))
-                }
-              />
-            </div>
-            <div>
-              <label>Weight Decay</label>
-              <input
-                type="number"
-                step="0.0001"
-                value={trainingParams.weight_decay}
-                onChange={(event) =>
-                  setTrainingParams((prev) => ({ ...prev, weight_decay: Number(event.target.value) }))
-                }
-              />
-            </div>
-            <div>
-              <label>Eval Interval</label>
-              <input
-                type="number"
-                value={trainingParams.eval_interval}
-                onChange={(event) =>
-                  setTrainingParams((prev) => ({ ...prev, eval_interval: Number(event.target.value) }))
-                }
-              />
-            </div>
-            <div>
-              <label>Save Interval</label>
-              <input
-                type="number"
-                value={trainingParams.save_interval}
-                onChange={(event) =>
-                  setTrainingParams((prev) => ({ ...prev, save_interval: Number(event.target.value) }))
-                }
-              />
-            </div>
-            <div>
-              <label>Max Length</label>
-              <input
-                type="number"
-                value={maxLength}
-                onChange={(event) => setMaxLength(Number(event.target.value))}
-              />
-            </div>
-            <div>
-              <label>Auto Start</label>
-              <select value={autoStart ? "yes" : "no"} onChange={(event) => setAutoStart(event.target.value === "yes")}>
-                <option value="yes">Yes</option>
-                <option value="no">No</option>
-              </select>
-            </div>
-          </div>
+          </details>
           <div className="grid-3" style={{ marginTop: 16 }}>
             <StatCard label="Batch Size" value={trainingParams.batch_size} />
             <StatCard label="Learning Rate" value={trainingParams.learning_rate} />
@@ -647,9 +720,9 @@ export default function FinetunePage() {
         </div>
       </section>
 
-      <section className="section">
+      <section id="understand" className="section scroll-section">
         <div className="section-title">
-          <h2>Understand Fine-Tuning</h2>
+          <h2>Understand</h2>
           <p>Masked loss and optional LoRA math.</p>
         </div>
         <div className="card">
@@ -675,10 +748,10 @@ export default function FinetunePage() {
         </div>
       </section>
 
-      <section className="section">
+      <section id="train" className="section scroll-section">
         <div className="section-title">
-          <h2>Control</h2>
-          <p>Start, pause, resume, or step.</p>
+          <h2>Train</h2>
+          <p>Train your model.</p>
         </div>
         <div className="card">
           <div className="inline-row" style={{ marginBottom: 12 }}>
@@ -712,9 +785,9 @@ export default function FinetunePage() {
         </div>
       </section>
 
-      <section className="section">
+      <section id="metrics" className="section scroll-section">
         <div className="section-title">
-          <h2>Metrics</h2>
+          <h2>Live Metrics</h2>
           <p>Loss and gradients.</p>
         </div>
         <div className="card">
@@ -743,7 +816,7 @@ export default function FinetunePage() {
         </div>
       </section>
 
-      <section className="section">
+      <section id="inspect-batch" className="section scroll-section">
         <div className="section-title">
           <h2>Inspect Batch</h2>
           <p>Prompt vs response tokens and attention patterns.</p>
@@ -824,16 +897,12 @@ export default function FinetunePage() {
                 </div>
               </div>
             </div>
-            {attention.length > 0 ? (
-              <Heatmap matrix={attention} labels={inspectData?.token_labels || []} />
-            ) : (
-              <p style={{ marginTop: 8 }}>Attention loads after you select a sample.</p>
-            )}
+            <Heatmap matrix={attention} labels={inspectData?.token_labels || []} />
           </div>
         </div>
       </section>
 
-      <section className="section">
+      <section id="eval-history" className="section scroll-section">
         <div className="section-title">
           <h2>Eval History</h2>
           <p>Train vs validation loss.</p>
@@ -854,7 +923,7 @@ export default function FinetunePage() {
         </div>
       </section>
 
-      <section className="section">
+      <section id="logs" className="section scroll-section">
         <div className="section-title">
           <h2>Logs</h2>
           <p>Checkpoint events.</p>
@@ -865,7 +934,7 @@ export default function FinetunePage() {
           </div>
         </div>
       </section>
-
-    </>
+      </div>
+    </div>
   );
 }
