@@ -15,8 +15,6 @@ I built this as I wanted to properly understand LLMs. A great way to learn is to
 
 I'm incredibly grateful to all those from whom I learned and borrowed ideas (see [Resources](#resources)). I hope others find this repository helpful!
 
-_(Comments, corrections, and pull requests are very welcome. Currently, this repository serves a decoder-only architecture (like GPT, LLaMA, OLMo) and includes Mixture of Experts (MoE) architectures (like DeepSeek-V2 and Mixtral). It does not include encoder-only models (like BERT) or encoder-decoder models (like T5). It includes pre-training and supervised fine-tuning (SFT), but not yet RLHF or other advanced fine-tuning techniques.)_
-
 ## Quickstart ##
 
 ### Local ###
@@ -26,20 +24,6 @@ The following command will install `uv` and run the app:
 ```bash
 ./run.sh
 ```
-
-### Remote (via RunPod) ###
-
-If running locally isn't an option, I'd suggest [RunPod](https://runpod.io?ref=avnw83xb):
-
-- Create a new pod.
-- Press 'Edit Template' and add `3000` and `8000` to the list of exposed HTTP ports.
-- (You may want to increase the persistent disk space (Volume Disk).)
-- Click, "Set Overrides," and, "Deploy On-Demand," and wait for the deployment to complete.
-- You'll then want to SSH into the instance, either via the browser or in your own terminal, as per the given instructions.
-- Once you're in, you'll need to run `git clone https://github.com/jammastergirish/BuildAnLLM && cd BuildAnLLM`.
-- Set the backend URL for the frontend (replace with your RunPod host): `export NEXT_PUBLIC_API_BASE_URL="https://<your-pod-host>:8000"`.
-- Run `./run.sh`, which will install `uv`, start FastAPI, and launch the Next.js frontend.
-- You can then see the web app in your browser via instructions in the Connect panel at RunPod.
 
 ## What You'll Learn
 
