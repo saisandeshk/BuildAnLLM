@@ -9,6 +9,7 @@ export const modelEquations = `
 ---
 ### Token embedding
 $$E \in \mathbb{R}^{V \times d_{model}}$$
+
 $$x_0 = E[\text{tokens}]$$
 
 ---
@@ -19,6 +20,7 @@ $$x_0 = x_0 + P[\text{positions}]$$
 ---
 ### Attention
 $$Q = x W_Q, \; K = x W_K, \; V = x W_V$$
+
 $$\text{attn}(x) = \text{softmax}(QK^T / \sqrt{d_{head}}) V$$
 
 ---
@@ -28,6 +30,7 @@ $$\text{mlp}(x) = W_{out} \sigma(W_{in} x)$$
 ---
 ### Residual block
 $$x_{i+1} = x_i + \text{attn}(x_i)$$
+
 $$x_{i+2} = x_{i+1} + \text{mlp}(x_{i+1})$$
 `;
 
@@ -51,11 +54,13 @@ $$\text{sequence} = [\text{prompt}] + [\text{response}]$$
 
 ### Masked loss
 $$m_i = 1 \text{ for response tokens, } 0 \text{ otherwise}$$
+
 $$\mathcal{L} = \frac{\sum_i m_i \cdot \mathcal{L}_i}{\sum_i m_i}$$
 `;
 
 export const loraEquations = `
 ### LoRA adaptation
 $$W_{effective} = W + \frac{\alpha}{r} (B A)$$
+
 $$A \in \mathbb{R}^{r \times d_{in}}, \; B \in \mathbb{R}^{d_{out} \times r}$$
 `;

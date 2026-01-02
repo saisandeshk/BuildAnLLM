@@ -20,7 +20,7 @@ const plexMono = IBM_Plex_Mono({
 
 export const metadata = {
   title: "Build an LLM",
-  description: "Training and inference dashboard",
+  description: "Learn by doing",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
@@ -30,7 +30,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <header className="site-header">
           <div className="brand">
             Build an LLM
-            <span>Training and inference</span>
+            <span>Learn by doing</span>
           </div>
           <Nav />
         </header>

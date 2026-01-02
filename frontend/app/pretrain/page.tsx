@@ -41,7 +41,8 @@ type AxisDomain = [AxisDomainValue, AxisDomainValue];
 
 export default function PretrainPage() {
   const [modelConfig, setModelConfig] = useState<ModelConfig>(defaultModelConfig);
-  const [modelSize, setModelSize] = useState<ModelSize>("small");
+  const [modelSize, setModelSize] = useState<ModelSize | null>("small");
+  const [activePreset, setActivePreset] = useState<string | null>("gpt");
   const [useEinops, setUseEinops] = useState(true);
   const [tokenizerType, setTokenizerType] = useState("bpe-tiktoken");
   const [trainingFile, setTrainingFile] = useState<File | null>(null);
@@ -63,9 +64,9 @@ export default function PretrainPage() {
   const [logs, setLogs] = useState<string[]>([]);
   const [snippets, setSnippets] = useState<CodeSnippet[]>([]);
   const [snippetsLoading, setSnippetsLoading] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [inspectSample, setInspectSample] = useState(0);
-  const [inspectMaxTokens, setInspectMaxTokens] = useState(128);
   const [inspectData, setInspectData] = useState<{
     token_labels: string[];
     target_token: string;
@@ -77,6 +78,7 @@ export default function PretrainPage() {
   const [attnLayer, setAttnLayer] = useState(0);
   const [attnHead, setAttnHead] = useState(0);
   const inspectThrottleRef = useRef(0);
+  const inspectMaxTokens = 128;
 
   const ssePath = job ? `/api/pretrain/jobs/${job.job_id}/events` : undefined;
   const { lastEvent, error: sseError } = useSse(ssePath, Boolean(job));
@@ -167,8 +169,23 @@ export default function PretrainPage() {
   const lossXMax = job?.max_iters ?? metrics?.max_iters ?? 0;
   const lossXDomain: AxisDomain = lossXMax > 0 ? [0, lossXMax] : [0, 1];
   const lossYDomain: AxisDomain = metricsHistory.length > 0 ? [0, "dataMax"] : [0, 1];
+  const maxSampleIndex = Math.max(0, trainingParams.batch_size - 1);
+  const maxLayerIndex = Math.max(0, modelConfig.n_layers - 1);
+  const maxHeadIndex = Math.max(0, modelConfig.n_heads - 1);
+
+  const markConfigManual = () => {
+    setActivePreset(null);
+    setModelSize(null);
+  };
+
+  const updateModelConfig = (updater: (prev: ModelConfig) => ModelConfig) => {
+    setModelConfig((prev) => updater(prev));
+    markConfigManual();
+  };
 
   const handlePreset = (preset: string) => {
+    setActivePreset(preset);
+    setModelSize(null);
     setModelConfig((prev) => applyPreset(prev, preset));
   };
 
@@ -209,6 +226,7 @@ export default function PretrainPage() {
 
   const createJob = async () => {
     setError(null);
+    setIsCreating(true);
     try {
       const payload = {
         model_config: { ...modelConfig, use_einops: useEinops },
@@ -231,6 +249,8 @@ export default function PretrainPage() {
       setAttention([]);
     } catch (err) {
       setError((err as Error).message);
+    } finally {
+      setIsCreating(false);
     }
   };
 
@@ -299,11 +319,13 @@ export default function PretrainPage() {
     }
   };
 
-  const loadAttention = async () => {
+  const loadAttention = async (sampleIndex?: number, silent = false) => {
     if (!job) return;
-    setError(null);
+    if (!silent) {
+      setError(null);
+    }
     try {
-      const index = isRunning ? 0 : inspectSample;
+      const index = isRunning ? 0 : sampleIndex ?? inspectSample;
       const data = await fetchJson<{ attention: number[][] }>(
         `/api/pretrain/jobs/${job.job_id}/attention`,
         {
@@ -322,6 +344,25 @@ export default function PretrainPage() {
       setError((err as Error).message);
     }
   };
+
+  const refreshInspect = async (sampleIndex?: number, silent = false) => {
+    await inspectBatch(sampleIndex, silent);
+    await loadAttention(sampleIndex, silent);
+  };
+
+  const handleSampleChange = (value: number) => {
+    setInspectSample(value);
+    if (!job || isRunning) {
+      return;
+    }
+    refreshInspect(value);
+  };
+
+  useEffect(() => {
+    if (inspectSample > maxSampleIndex) {
+      setInspectSample(maxSampleIndex);
+    }
+  }, [inspectSample, maxSampleIndex]);
 
   useEffect(() => {
     if (job?.status === "running") {
@@ -342,14 +383,21 @@ export default function PretrainPage() {
     }
     inspectThrottleRef.current = now;
     inspectBatch(0, true);
-  }, [lastEvent, job, inspectMaxTokens]);
+  }, [lastEvent, job]);
+
+  useEffect(() => {
+    if (!job || isRunning || !inspectData) {
+      return;
+    }
+    loadAttention(undefined, true);
+  }, [attnLayer, attnHead, job, isRunning, inspectData]);
 
   return (
     <>
       <section className="section">
         <div className="section-title">
-          <h2>Upload Training Data</h2>
-          <p>Provide a text file or let the backend use training.txt.</p>
+          <h2>Select or Upload Training Data</h2>
+          <p>Provide a text file or use a default set of George Orwell's books.</p>
         </div>
         <div className="card">
           <input
@@ -362,28 +410,59 @@ export default function PretrainPage() {
 
       <section className="section">
         <div className="section-title">
-          <h2>Model Architecture</h2>
-          <p>Presets, components, and dimensions.</p>
+          <h2>Choose Architecture</h2>
+          <p>Select a preset and/or go deeper with architecutre settings.</p>
         </div>
         <div className="card">
-          <div className="inline-row" style={{ marginBottom: 12 }}>
-            <button className="secondary" onClick={() => handlePreset("gpt")}>GPT-2</button>
-            <button className="secondary" onClick={() => handlePreset("llama")}>LLaMA 4</button>
-            <button className="secondary" onClick={() => handlePreset("olmo")}>OLMo 3</button>
-            <button className="secondary" onClick={() => handlePreset("deepseek")}>DeepSeek V2</button>
-            <button className="secondary" onClick={() => handlePreset("mixtral")}>Mixtral</button>
+          <div className="row-label" style={{ marginBottom: 12 }}>
+            <span className="row-label-title">Architecture</span>
+            <div className="inline-row">
+              <button
+                className={activePreset === "gpt" ? "primary" : "secondary"}
+                onClick={() => handlePreset("gpt")}
+              >
+                GPT-2
+              </button>
+              <button
+                className={activePreset === "llama" ? "primary" : "secondary"}
+                onClick={() => handlePreset("llama")}
+              >
+                LLaMA 4
+              </button>
+              <button
+                className={activePreset === "olmo" ? "primary" : "secondary"}
+                onClick={() => handlePreset("olmo")}
+              >
+                OLMo 3
+              </button>
+              <button
+                className={activePreset === "deepseek" ? "primary" : "secondary"}
+                onClick={() => handlePreset("deepseek")}
+              >
+                DeepSeek V2
+              </button>
+              <button
+                className={activePreset === "mixtral" ? "primary" : "secondary"}
+                onClick={() => handlePreset("mixtral")}
+              >
+                Mixtral
+              </button>
+            </div>
           </div>
 
-          <div className="inline-row" style={{ marginBottom: 16 }}>
-            {["small", "medium", "full"].map((size) => (
-              <button
-                key={size}
-                className={modelSize === size ? "primary" : "secondary"}
-                onClick={() => handleSize(size as ModelSize)}
-              >
-                {size}
-              </button>
-            ))}
+          <div className="row-label" style={{ marginBottom: 16 }}>
+            <span className="row-label-title">Size</span>
+            <div className="inline-row">
+              {["small", "medium", "full"].map((size) => (
+                <button
+                  key={size}
+                  className={modelSize === size ? "primary" : "secondary"}
+                  onClick={() => handleSize(size as ModelSize)}
+                >
+                  {size}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="grid-3">
@@ -392,7 +471,7 @@ export default function PretrainPage() {
               <select
                 value={modelConfig.positional_encoding}
                 onChange={(event) =>
-                  setModelConfig((prev) => ({
+                  updateModelConfig((prev) => ({
                     ...prev,
                     positional_encoding: event.target.value as ModelConfig["positional_encoding"],
                   }))
@@ -409,7 +488,7 @@ export default function PretrainPage() {
               <select
                 value={modelConfig.normalization}
                 onChange={(event) =>
-                  setModelConfig((prev) => ({
+                  updateModelConfig((prev) => ({
                     ...prev,
                     normalization: event.target.value as ModelConfig["normalization"],
                   }))
@@ -424,7 +503,7 @@ export default function PretrainPage() {
               <select
                 value={modelConfig.activation}
                 onChange={(event) =>
-                  setModelConfig((prev) => ({
+                  updateModelConfig((prev) => ({
                     ...prev,
                     activation: event.target.value as ModelConfig["activation"],
                   }))
@@ -440,7 +519,7 @@ export default function PretrainPage() {
                 value={attentionType}
                 onChange={(event) => {
                   const next = event.target.value;
-                  setModelConfig((prev) => {
+                  updateModelConfig((prev) => {
                     if (next === "mha") {
                       return { ...prev, n_kv_heads: prev.n_heads };
                     }
@@ -460,16 +539,16 @@ export default function PretrainPage() {
             {modelConfig.positional_encoding === "rope" && (
               <div>
                 <label>RoPE Theta</label>
-                <input
-                  type="number"
-                  value={modelConfig.rope_theta || 10000}
-                  onChange={(event) =>
-                    setModelConfig((prev) => ({
-                      ...prev,
-                      rope_theta: Number(event.target.value),
-                    }))
-                  }
-                />
+              <input
+                type="number"
+                value={modelConfig.rope_theta || 10000}
+                onChange={(event) =>
+                  updateModelConfig((prev) => ({
+                    ...prev,
+                    rope_theta: Number(event.target.value),
+                  }))
+                }
+              />
               </div>
             )}
             <div>
@@ -478,7 +557,7 @@ export default function PretrainPage() {
                 type="number"
                 value={modelConfig.d_model}
                 onChange={(event) =>
-                  setModelConfig((prev) => ({
+                  updateModelConfig((prev) => ({
                     ...prev,
                     d_model: Number(event.target.value),
                   }))
@@ -491,7 +570,7 @@ export default function PretrainPage() {
                 type="number"
                 value={modelConfig.n_heads}
                 onChange={(event) =>
-                  setModelConfig((prev) => ({
+                  updateModelConfig((prev) => ({
                     ...prev,
                     n_heads: Number(event.target.value),
                   }))
@@ -501,16 +580,16 @@ export default function PretrainPage() {
             {attentionType === "gqa" && (
               <div>
                 <label>n_kv_heads</label>
-                <input
-                  type="number"
-                  value={modelConfig.n_kv_heads || modelConfig.n_heads}
-                  onChange={(event) =>
-                    setModelConfig((prev) => ({
-                      ...prev,
-                      n_kv_heads: Number(event.target.value),
-                    }))
-                  }
-                />
+              <input
+                type="number"
+                value={modelConfig.n_kv_heads || modelConfig.n_heads}
+                onChange={(event) =>
+                  updateModelConfig((prev) => ({
+                    ...prev,
+                    n_kv_heads: Number(event.target.value),
+                  }))
+                }
+              />
               </div>
             )}
             <div>
@@ -519,7 +598,7 @@ export default function PretrainPage() {
                 type="number"
                 value={modelConfig.n_layers}
                 onChange={(event) =>
-                  setModelConfig((prev) => ({
+                  updateModelConfig((prev) => ({
                     ...prev,
                     n_layers: Number(event.target.value),
                   }))
@@ -532,7 +611,7 @@ export default function PretrainPage() {
                 type="number"
                 value={modelConfig.n_ctx}
                 onChange={(event) =>
-                  setModelConfig((prev) => ({
+                  updateModelConfig((prev) => ({
                     ...prev,
                     n_ctx: Number(event.target.value),
                   }))
@@ -545,7 +624,7 @@ export default function PretrainPage() {
                 type="number"
                 value={modelConfig.d_head}
                 onChange={(event) =>
-                  setModelConfig((prev) => ({
+                  updateModelConfig((prev) => ({
                     ...prev,
                     d_head: Number(event.target.value),
                   }))
@@ -558,7 +637,7 @@ export default function PretrainPage() {
                 type="number"
                 value={modelConfig.d_mlp}
                 onChange={(event) =>
-                  setModelConfig((prev) => ({
+                  updateModelConfig((prev) => ({
                     ...prev,
                     d_mlp: Number(event.target.value),
                   }))
@@ -570,7 +649,7 @@ export default function PretrainPage() {
               <select
                 value={modelConfig.use_moe ? "yes" : "no"}
                 onChange={(event) =>
-                  setModelConfig((prev) => ({
+                  updateModelConfig((prev) => ({
                     ...prev,
                     use_moe: event.target.value === "yes",
                   }))
@@ -582,7 +661,13 @@ export default function PretrainPage() {
             </div>
             <div>
               <label>Use Einops</label>
-              <select value={useEinops ? "yes" : "no"} onChange={(event) => setUseEinops(event.target.value === "yes")}>
+              <select
+                value={useEinops ? "yes" : "no"}
+                onChange={(event) => {
+                  setUseEinops(event.target.value === "yes");
+                  markConfigManual();
+                }}
+              >
                 <option value="yes">Yes</option>
                 <option value="no">No</option>
               </select>
@@ -597,7 +682,7 @@ export default function PretrainPage() {
                   type="number"
                   value={modelConfig.num_experts || 8}
                   onChange={(event) =>
-                    setModelConfig((prev) => ({
+                    updateModelConfig((prev) => ({
                       ...prev,
                       num_experts: Number(event.target.value),
                     }))
@@ -610,7 +695,7 @@ export default function PretrainPage() {
                   type="number"
                   value={modelConfig.num_experts_per_tok || 2}
                   onChange={(event) =>
-                    setModelConfig((prev) => ({
+                    updateModelConfig((prev) => ({
                       ...prev,
                       num_experts_per_tok: Number(event.target.value),
                     }))
@@ -622,7 +707,7 @@ export default function PretrainPage() {
                 <select
                   value={modelConfig.use_shared_experts ? "yes" : "no"}
                   onChange={(event) =>
-                    setModelConfig((prev) => ({
+                    updateModelConfig((prev) => ({
                       ...prev,
                       use_shared_experts: event.target.value === "yes",
                     }))
@@ -638,7 +723,7 @@ export default function PretrainPage() {
                   type="number"
                   value={modelConfig.num_shared_experts || 2}
                   onChange={(event) =>
-                    setModelConfig((prev) => ({
+                    updateModelConfig((prev) => ({
                       ...prev,
                       num_shared_experts: Number(event.target.value),
                     }))
@@ -650,7 +735,7 @@ export default function PretrainPage() {
                 <select
                   value={modelConfig.router_type || "top_k"}
                   onChange={(event) =>
-                    setModelConfig((prev) => ({
+                    updateModelConfig((prev) => ({
                       ...prev,
                       router_type: event.target.value as ModelConfig["router_type"],
                     }))
@@ -667,7 +752,7 @@ export default function PretrainPage() {
                   step="0.001"
                   value={modelConfig.load_balancing_loss_weight || 0.01}
                   onChange={(event) =>
-                    setModelConfig((prev) => ({
+                    updateModelConfig((prev) => ({
                       ...prev,
                       load_balancing_loss_weight: Number(event.target.value),
                     }))
@@ -681,7 +766,7 @@ export default function PretrainPage() {
                   step="0.05"
                   value={modelConfig.expert_capacity_factor || 1.25}
                   onChange={(event) =>
-                    setModelConfig((prev) => ({
+                    updateModelConfig((prev) => ({
                       ...prev,
                       expert_capacity_factor: Number(event.target.value),
                     }))
@@ -701,7 +786,7 @@ export default function PretrainPage() {
 
       <section className="section">
         <div className="section-title">
-          <h2>Tokenizer</h2>
+          <h2>Choose Tokenizer</h2>
           <p>Choose how input text is tokenized.</p>
         </div>
         <div className="card">
@@ -717,8 +802,8 @@ export default function PretrainPage() {
 
       <section className="section">
         <div className="section-title">
-          <h2>Training Hyperparameters</h2>
-          <p>Core settings for training.</p>
+          <h2>Choose Hyperparameters</h2>
+          <p>Decide on core settings for training.</p>
         </div>
         <div className="card">
           <div className="grid-3">
@@ -807,38 +892,54 @@ export default function PretrainPage() {
 
       <section className="section">
         <div className="section-title">
-          <h2>Understand the Model</h2>
-          <p>Architecture diagram and math references.</p>
+          <h2>Understand Model</h2>
+          <p>Better understand the model architecture, code, and math.</p>
         </div>
         <div className="card">
-          <h3>Architecture Diagram</h3>
-          <GraphvizDiagram dot={diagramDot} />
-          <div style={{ marginTop: 16 }}>
-            <h3>Equations</h3>
-            <MarkdownBlock content={modelEquations} />
-          </div>
-          <div style={{ marginTop: 16 }}>
-            <h3>Code Snippets</h3>
-            {snippetsLoading ? (
-              <p>Loading code snippets...</p>
-            ) : snippets.length === 0 ? (
-              <p>No snippets available yet.</p>
-            ) : (
-              snippets.map((snippet) => <CodePanel key={snippet.title} snippet={snippet} />)
-            )}
-          </div>
+          <details className="expander">
+            <summary>Architecture Diagram</summary>
+            <div className="expander-content">
+              <GraphvizDiagram dot={diagramDot} />
+            </div>
+          </details>
+          <details className="expander">
+            <summary>Equations</summary>
+            <div className="expander-content">
+              <MarkdownBlock content={modelEquations} />
+            </div>
+          </details>
+          <details className="expander">
+            <summary>Code Snippets</summary>
+            <div className="expander-content">
+              {snippetsLoading ? (
+                <p>Loading code snippets...</p>
+              ) : snippets.length === 0 ? (
+                <p>No snippets available yet.</p>
+              ) : (
+                snippets.map((snippet) => <CodePanel key={snippet.title} snippet={snippet} />)
+              )}
+            </div>
+          </details>
         </div>
       </section>
 
       <section className="section">
         <div className="section-title">
-          <h2>Training Control</h2>
-          <p>Start, pause, resume, or step through batches.</p>
+          <h2>Train Model</h2>
+          <p>Train your model.</p>
         </div>
         <div className="card">
           <div className="inline-row" style={{ marginBottom: 12 }}>
-            <button className="primary" onClick={handlePrimaryAction}>
-              {!job ? "Start Training" : isRunning ? "Pause" : isPaused ? "Resume" : "Start New"}
+            <button className="primary" onClick={handlePrimaryAction} disabled={isCreating}>
+              {isCreating
+                ? "Initializing..."
+                : !job
+                ? "Start Training"
+                : isRunning
+                ? "Pause"
+                : isPaused
+                ? "Resume"
+                : "Start New"}
             </button>
             <button className="secondary" onClick={stepJob} disabled={!job || isRunning}>
               Step
@@ -904,35 +1005,21 @@ export default function PretrainPage() {
           <p>Peek at tokens, next-token predictions, and attention.</p>
         </div>
         <div className="card">
-          <div className="grid-3" style={{ marginBottom: 12 }}>
-            <div>
-              <label>Sample Index</label>
+          <div className="slider" style={{ marginBottom: 12 }}>
+            <label>Sample</label>
+            <div className="slider-row">
               <input
-                type="number"
+                type="range"
+                min={0}
+                max={maxSampleIndex}
+                step={1}
                 value={inspectSample}
-                onChange={(event) => setInspectSample(Number(event.target.value))}
-                disabled={isRunning}
+                onChange={(event) => handleSampleChange(Number(event.target.value))}
+                disabled={!job || isRunning}
               />
-            </div>
-            <div>
-              <label>Max Tokens</label>
-              <input
-                type="number"
-                value={inspectMaxTokens}
-                onChange={(event) => setInspectMaxTokens(Number(event.target.value))}
-                disabled={isRunning}
-              />
-            </div>
-            <div>
-              <label>Actions</label>
-              <div className="inline-row">
-                <button className="secondary" onClick={() => inspectBatch()} disabled={!job || isRunning}>
-                  Load Batch
-                </button>
-                <button className="secondary" onClick={loadAttention} disabled={!job || !inspectData || isRunning}>
-                  Load Attention
-                </button>
-              </div>
+              <span className="slider-value">
+                {inspectSample} / {maxSampleIndex}
+              </span>
             </div>
           </div>
           {isRunning && <p>Live batch inspection updates while training is running.</p>}
@@ -965,37 +1052,49 @@ export default function PretrainPage() {
               </div>
             </div>
           ) : (
-            <p>Load a batch to inspect tokens and predictions.</p>
+            <p>Select a sample to inspect tokens and predictions.</p>
           )}
 
           <div style={{ marginTop: 16 }}>
-            <div className="grid-3">
-              <div>
+            <div className="grid-2">
+              <div className="slider">
                 <label>Layer</label>
-                <input
-                  type="number"
-                  min={0}
-                  max={Math.max(0, modelConfig.n_layers - 1)}
-                  value={attnLayer}
-                  onChange={(event) => setAttnLayer(Number(event.target.value))}
-                />
+                <div className="slider-row">
+                  <input
+                    type="range"
+                    min={0}
+                    max={maxLayerIndex}
+                    step={1}
+                    value={attnLayer}
+                    onChange={(event) => setAttnLayer(Number(event.target.value))}
+                    disabled={!job || isRunning}
+                  />
+                  <span className="slider-value">
+                    {attnLayer} / {maxLayerIndex}
+                  </span>
+                </div>
               </div>
-              <div>
+              <div className="slider">
                 <label>Head</label>
-                <input
-                  type="number"
-                  min={0}
-                  max={Math.max(0, modelConfig.n_heads - 1)}
-                  value={attnHead}
-                  onChange={(event) => setAttnHead(Number(event.target.value))}
-                />
+                <div className="slider-row">
+                  <input
+                    type="range"
+                    min={0}
+                    max={maxHeadIndex}
+                    step={1}
+                    value={attnHead}
+                    onChange={(event) => setAttnHead(Number(event.target.value))}
+                    disabled={!job || isRunning}
+                  />
+                  <span className="slider-value">
+                    {attnHead} / {maxHeadIndex}
+                  </span>
+                </div>
               </div>
             </div>
-            {attention.length > 0 ? (
+
               <Heatmap matrix={attention} labels={inspectData?.token_labels || []} />
-            ) : (
-              <p style={{ marginTop: 8 }}>Load attention to visualize patterns.</p>
-            )}
+
           </div>
         </div>
       </section>
@@ -1024,7 +1123,7 @@ export default function PretrainPage() {
       <section className="section">
         <div className="section-title">
           <h2>Logs</h2>
-          <p>Checkpoint and status events.</p>
+          {/* <p>Checkpoint and status events.</p> */}
         </div>
         <div className="card">
           <div className="log-box">

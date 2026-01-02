@@ -156,6 +156,8 @@ export default function InferencePage() {
 
   const layersCount = session ? Number(session.cfg?.n_layers || 0) : 0;
   const headsCount = session ? Number(session.cfg?.n_heads || 0) : 0;
+  const maxLayerIndex = Math.max(0, layersCount - 1);
+  const maxHeadIndex = Math.max(0, headsCount - 1);
 
   return (
     <>
@@ -259,7 +261,12 @@ export default function InferencePage() {
           <p>Sampling equations and references.</p>
         </div>
         <div className="card">
-          <MarkdownBlock content={inferenceEquations} />
+          <details className="expander">
+            <summary>Equations</summary>
+            <div className="expander-content">
+              <MarkdownBlock content={inferenceEquations} />
+            </div>
+          </details>
         </div>
       </section>
 
@@ -287,25 +294,39 @@ export default function InferencePage() {
           {diagnostics ? (
             <>
               <div className="grid-3">
-                <div>
+                <div className="slider">
                   <label>Layer</label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={Math.max(0, layersCount - 1)}
-                    value={selectedLayer}
-                    onChange={(event) => setSelectedLayer(Number(event.target.value))}
-                  />
+                  <div className="slider-row">
+                    <input
+                      type="range"
+                      min={0}
+                      max={maxLayerIndex}
+                      step={1}
+                      value={selectedLayer}
+                      onChange={(event) => setSelectedLayer(Number(event.target.value))}
+                      disabled={maxLayerIndex === 0}
+                    />
+                    <span className="slider-value">
+                      {selectedLayer} / {maxLayerIndex}
+                    </span>
+                  </div>
                 </div>
-                <div>
+                <div className="slider">
                   <label>Head</label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={Math.max(0, headsCount - 1)}
-                    value={selectedHead}
-                    onChange={(event) => setSelectedHead(Number(event.target.value))}
-                  />
+                  <div className="slider-row">
+                    <input
+                      type="range"
+                      min={0}
+                      max={maxHeadIndex}
+                      step={1}
+                      value={selectedHead}
+                      onChange={(event) => setSelectedHead(Number(event.target.value))}
+                      disabled={maxHeadIndex === 0}
+                    />
+                    <span className="slider-value">
+                      {selectedHead} / {maxHeadIndex}
+                    </span>
+                  </div>
                 </div>
                 <div>
                   <label>Logit Lens Position</label>
@@ -381,11 +402,16 @@ export default function InferencePage() {
           <p>Sampling and inference code.</p>
         </div>
         <div>
-          {snippets.length === 0 ? (
-            <div className="card">Load code snippets to inspect inference modules.</div>
-          ) : (
-            snippets.map((snippet) => <CodePanel key={snippet.title} snippet={snippet} />)
-          )}
+          <details className="expander">
+            <summary>Code Snippets</summary>
+            <div className="expander-content">
+              {snippets.length === 0 ? (
+                <div className="card">Load code snippets to inspect inference modules.</div>
+              ) : (
+                snippets.map((snippet) => <CodePanel key={snippet.title} snippet={snippet} />)
+              )}
+            </div>
+          </details>
         </div>
       </section>
     </>

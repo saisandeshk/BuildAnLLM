@@ -57,9 +57,9 @@ export default function FinetunePage() {
   const [logs, setLogs] = useState<string[]>([]);
   const [snippets, setSnippets] = useState<CodeSnippet[]>([]);
   const [snippetsLoading, setSnippetsLoading] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [inspectSample, setInspectSample] = useState(0);
-  const [inspectMaxTokens, setInspectMaxTokens] = useState(128);
   const [inspectData, setInspectData] = useState<{
     token_labels: string[];
     prompt_tokens: string[];
@@ -69,6 +69,7 @@ export default function FinetunePage() {
   const [attnLayer, setAttnLayer] = useState(0);
   const [attnHead, setAttnHead] = useState(0);
   const inspectThrottleRef = useRef(0);
+  const inspectMaxTokens = 128;
 
   useEffect(() => {
     fetchJson<{ checkpoints: Checkpoint[] }>("/api/checkpoints")
@@ -185,11 +186,15 @@ export default function FinetunePage() {
   const elapsedDisplay = elapsedTime !== undefined ? formatDuration(elapsedTime) : job ? "Calculating..." : "-";
   const etaDisplay =
     etaSeconds !== undefined && etaSeconds !== null ? formatDuration(etaSeconds) : job ? "Calculating..." : "-";
+  const maxSampleIndex = Math.max(0, trainingParams.batch_size - 1);
+  const maxLayerIndex = Math.max(0, layersCount - 1);
+  const maxHeadIndex = Math.max(0, headsCount - 1);
   const layersCount = checkpointConfig ? Number(checkpointConfig.n_layers || 0) : 0;
   const headsCount = checkpointConfig ? Number(checkpointConfig.n_heads || 0) : 0;
 
   const createJob = async () => {
     setError(null);
+    setIsCreating(true);
     try {
       if (!selectedCheckpoint) {
         throw new Error("Select a checkpoint before starting.");
@@ -217,6 +222,8 @@ export default function FinetunePage() {
       setAttention([]);
     } catch (err) {
       setError((err as Error).message);
+    } finally {
+      setIsCreating(false);
     }
   };
 
@@ -296,11 +303,13 @@ export default function FinetunePage() {
     }
   };
 
-  const loadAttention = async () => {
+  const loadAttention = async (sampleIndex?: number, silent = false) => {
     if (!job) return;
-    setError(null);
+    if (!silent) {
+      setError(null);
+    }
     try {
-      const index = isRunning ? 0 : inspectSample;
+      const index = isRunning ? 0 : sampleIndex ?? inspectSample;
       const data = await fetchJson<{ attention: number[][] }>(
         `/api/finetune/jobs/${job.job_id}/attention`,
         {
@@ -319,6 +328,25 @@ export default function FinetunePage() {
       setError((err as Error).message);
     }
   };
+
+  const refreshInspect = async (sampleIndex?: number, silent = false) => {
+    await inspectBatch(sampleIndex, silent);
+    await loadAttention(sampleIndex, silent);
+  };
+
+  const handleSampleChange = (value: number) => {
+    setInspectSample(value);
+    if (!job || isRunning) {
+      return;
+    }
+    refreshInspect(value);
+  };
+
+  useEffect(() => {
+    if (inspectSample > maxSampleIndex) {
+      setInspectSample(maxSampleIndex);
+    }
+  }, [inspectSample, maxSampleIndex]);
 
   useEffect(() => {
     let active = true;
@@ -355,7 +383,14 @@ export default function FinetunePage() {
     }
     inspectThrottleRef.current = now;
     inspectBatch(0, true);
-  }, [lastEvent, job, inspectMaxTokens]);
+  }, [lastEvent, job]);
+
+  useEffect(() => {
+    if (!job || isRunning || !inspectData) {
+      return;
+    }
+    loadAttention(undefined, true);
+  }, [attnLayer, attnHead, job, isRunning, inspectData]);
 
   return (
     <>
@@ -608,18 +643,25 @@ export default function FinetunePage() {
           <p>Masked loss and optional LoRA math.</p>
         </div>
         <div className="card">
-          <MarkdownBlock content={finetuneEquations} />
-          {method === "lora" && <MarkdownBlock content={loraEquations} />}
-          <div style={{ marginTop: 16 }}>
-            <h3>Code Snippets</h3>
-            {snippetsLoading ? (
-              <p>Loading code snippets...</p>
-            ) : snippets.length === 0 ? (
-              <p>No snippets available yet.</p>
-            ) : (
-              snippets.map((snippet) => <CodePanel key={snippet.title} snippet={snippet} />)
-            )}
-          </div>
+          <details className="expander">
+            <summary>Equations</summary>
+            <div className="expander-content">
+              <MarkdownBlock content={finetuneEquations} />
+              {method === "lora" && <MarkdownBlock content={loraEquations} />}
+            </div>
+          </details>
+          <details className="expander">
+            <summary>Code Snippets</summary>
+            <div className="expander-content">
+              {snippetsLoading ? (
+                <p>Loading code snippets...</p>
+              ) : snippets.length === 0 ? (
+                <p>No snippets available yet.</p>
+              ) : (
+                snippets.map((snippet) => <CodePanel key={snippet.title} snippet={snippet} />)
+              )}
+            </div>
+          </details>
         </div>
       </section>
 
@@ -630,8 +672,16 @@ export default function FinetunePage() {
         </div>
         <div className="card">
           <div className="inline-row" style={{ marginBottom: 12 }}>
-            <button className="primary" onClick={handlePrimaryAction}>
-              {!job ? "Start Fine-Tuning" : isRunning ? "Pause" : isPaused ? "Resume" : "Start New"}
+            <button className="primary" onClick={handlePrimaryAction} disabled={isCreating}>
+              {isCreating
+                ? "Initializing..."
+                : !job
+                ? "Start Fine-Tuning"
+                : isRunning
+                ? "Pause"
+                : isPaused
+                ? "Resume"
+                : "Start New"}
             </button>
             <button className="secondary" onClick={stepJob} disabled={!job || isRunning}>
               Step
@@ -689,35 +739,21 @@ export default function FinetunePage() {
           <p>Prompt vs response tokens and attention patterns.</p>
         </div>
         <div className="card">
-          <div className="grid-3" style={{ marginBottom: 12 }}>
-            <div>
-              <label>Sample Index</label>
+          <div className="slider" style={{ marginBottom: 12 }}>
+            <label>Sample</label>
+            <div className="slider-row">
               <input
-                type="number"
+                type="range"
+                min={0}
+                max={maxSampleIndex}
+                step={1}
                 value={inspectSample}
-                onChange={(event) => setInspectSample(Number(event.target.value))}
-                disabled={isRunning}
+                onChange={(event) => handleSampleChange(Number(event.target.value))}
+                disabled={!job || isRunning}
               />
-            </div>
-            <div>
-              <label>Max Tokens</label>
-              <input
-                type="number"
-                value={inspectMaxTokens}
-                onChange={(event) => setInspectMaxTokens(Number(event.target.value))}
-                disabled={isRunning}
-              />
-            </div>
-            <div>
-              <label>Actions</label>
-              <div className="inline-row">
-                <button className="secondary" onClick={() => inspectBatch()} disabled={!job || isRunning}>
-                  Load Batch
-                </button>
-                <button className="secondary" onClick={loadAttention} disabled={!job || !inspectData || isRunning}>
-                  Load Attention
-                </button>
-              </div>
+              <span className="slider-value">
+                {inspectSample} / {maxSampleIndex}
+              </span>
             </div>
           </div>
           {isRunning && <p>Live batch inspection updates while training is running.</p>}
@@ -738,36 +774,50 @@ export default function FinetunePage() {
               </div>
             </div>
           ) : (
-            <p>Load a batch to inspect prompt/response tokens.</p>
+            <p>Select a sample to inspect prompt/response tokens.</p>
           )}
 
           <div style={{ marginTop: 16 }}>
-            <div className="grid-3">
-              <div>
+            <div className="grid-2">
+              <div className="slider">
                 <label>Layer</label>
-                <input
-                  type="number"
-                  min={0}
-                  max={layersCount ? Math.max(0, layersCount - 1) : undefined}
-                  value={attnLayer}
-                  onChange={(event) => setAttnLayer(Number(event.target.value))}
-                />
+                <div className="slider-row">
+                  <input
+                    type="range"
+                    min={0}
+                    max={maxLayerIndex}
+                    step={1}
+                    value={attnLayer}
+                    onChange={(event) => setAttnLayer(Number(event.target.value))}
+                    disabled={!job || isRunning || maxLayerIndex === 0}
+                  />
+                  <span className="slider-value">
+                    {attnLayer} / {maxLayerIndex}
+                  </span>
+                </div>
               </div>
-              <div>
+              <div className="slider">
                 <label>Head</label>
-                <input
-                  type="number"
-                  min={0}
-                  max={headsCount ? Math.max(0, headsCount - 1) : undefined}
-                  value={attnHead}
-                  onChange={(event) => setAttnHead(Number(event.target.value))}
-                />
+                <div className="slider-row">
+                  <input
+                    type="range"
+                    min={0}
+                    max={maxHeadIndex}
+                    step={1}
+                    value={attnHead}
+                    onChange={(event) => setAttnHead(Number(event.target.value))}
+                    disabled={!job || isRunning || maxHeadIndex === 0}
+                  />
+                  <span className="slider-value">
+                    {attnHead} / {maxHeadIndex}
+                  </span>
+                </div>
               </div>
             </div>
             {attention.length > 0 ? (
               <Heatmap matrix={attention} labels={inspectData?.token_labels || []} />
             ) : (
-              <p style={{ marginTop: 8 }}>Load attention to visualize patterns.</p>
+              <p style={{ marginTop: 8 }}>Attention loads after you select a sample.</p>
             )}
           </div>
         </div>

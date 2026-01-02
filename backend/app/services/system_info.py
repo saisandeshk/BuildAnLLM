@@ -94,8 +94,8 @@ def get_system_info() -> Dict[str, str]:
     mps = "Available via Apple Silicon" if mps_available else "Not available"
 
     return {
-        "cpu": f"{cpu_info} - {num_threads} threads / {total_cores} cores",
-        "ram_gb": f"{mem_gb:.2f}",
+        "cpu": f"{cpu_info} with {num_threads} threads/{total_cores} cores",
+        "ram_gb": f"{mem_gb:.0f}",
         "gpu": gpu,
         "mps": mps,
         "os": os_info,

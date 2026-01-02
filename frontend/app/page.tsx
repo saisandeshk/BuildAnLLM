@@ -34,7 +34,7 @@ export default async function OverviewPage() {
       <section className="section">
         <div className="section-title">
           <h2>Device</h2>
-          <p>Runtime and hardware details reported by the backend.</p>
+          {/* <p>Runtime and hardware details reported by the backend.</p> */}
         </div>
         <div className="card">
           {systemInfo ? (
@@ -59,13 +59,13 @@ export default async function OverviewPage() {
           <p>Reference notes from the repository.</p>
         </div>
         <div className="card" style={{ padding: 24 }}>
-          {readme ? (
+          {/* {readme ? (
             <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
               {readme}
             </ReactMarkdown>
           ) : (
             <p>README.md not found.</p>
-          )}
+          )} */}
         </div>
       </section>
     </>
