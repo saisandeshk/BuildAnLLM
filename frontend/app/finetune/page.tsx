@@ -10,7 +10,7 @@ import { fetchJson, makeFormData, Checkpoint, CodeSnippet, JobStatus } from "../
 import { useSse } from "../../lib/useSse";
 import MarkdownBlock from "../../components/MarkdownBlock";
 import { finetuneEquations, loraEquations } from "../../lib/equations";
-import { formatDuration } from "../../lib/time";
+import { formatDuration, formatTimestamp } from "../../lib/time";
 
 type MetricsPayload = {
   loss?: number;
@@ -113,6 +113,7 @@ export default function FinetunePage() {
 
   const ssePath = job ? `/api/finetune/jobs/${job.job_id}/events` : undefined;
   const { lastEvent, error: sseError } = useSse(ssePath, Boolean(job));
+  const withTimestamp = (message: string) => `[${formatTimestamp()}] ${message}`;
 
   useEffect(() => {
     if (!lastEvent) {
@@ -144,19 +145,19 @@ export default function FinetunePage() {
     }
     if (lastEvent.type === "checkpoint") {
       const payload = lastEvent.payload as { iter: number };
-      setLogs((prev) => [`Checkpoint saved at ${payload.iter}`, ...prev].slice(0, 200));
+      setLogs((prev) => [withTimestamp(`Checkpoint saved at ${payload.iter}`), ...prev].slice(0, 200));
     }
     if (lastEvent.type === "eval") {
       const payload = lastEvent.payload as { iter?: number; train_loss?: number; val_loss?: number };
       const iter = payload.iter ?? "?";
       const train = payload.train_loss?.toFixed?.(4) ?? "-";
       const val = payload.val_loss?.toFixed?.(4) ?? "-";
-      setLogs((prev) => [`Eval @ ${iter}: train ${train}, val ${val}`, ...prev].slice(0, 200));
+      setLogs((prev) => [withTimestamp(`Eval @ ${iter}: train ${train}, val ${val}`), ...prev].slice(0, 200));
     }
     if (lastEvent.type === "log") {
       const payload = lastEvent.payload as { message?: string };
       if (payload?.message) {
-        setLogs((prev) => [payload.message, ...prev].slice(0, 200));
+        setLogs((prev) => [withTimestamp(payload.message), ...prev].slice(0, 200));
       }
     }
     if (lastEvent.type === "done") {

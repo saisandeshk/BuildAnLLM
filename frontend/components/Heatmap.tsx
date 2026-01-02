@@ -13,13 +13,14 @@ export default function Heatmap({
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const [width, setWidth] = useState(0);
 
-  const size = matrix.length;
+  const size = matrix.length || labels.length;
   const axisLabels = labels.slice(0, size);
   const labelWidth = 120;
   const topLabelHeight = 64;
   const availableWidth = Math.max(0, (width || 0) - labelWidth);
   const cell = Math.max(2, Math.min(14, Math.floor(availableWidth / (size || 1)) || 10));
   const canvasSize = size * cell;
+  const isLoading = matrix.length === 0 && size > 0;
 
   const topGridStyle = useMemo(
     () => ({
@@ -139,7 +140,14 @@ export default function Heatmap({
             </span>
           ))}
         </div>
-        <canvas ref={canvasRef} />
+        <div
+          className="heatmap-canvas"
+          data-loading={isLoading ? "true" : "false"}
+          style={{ width: `${canvasSize}px`, height: `${canvasSize}px` }}
+        >
+          <canvas ref={canvasRef} />
+          {isLoading && <div className="heatmap-placeholder">Loading attention...</div>}
+        </div>
       </div>
     </div>
   );

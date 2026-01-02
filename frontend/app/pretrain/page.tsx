@@ -10,7 +10,7 @@ import StatCard from "../../components/StatCard";
 import TokenRainbow from "../../components/TokenRainbow";
 import { fetchJson, makeFormData, CodeSnippet, JobStatus } from "../../lib/api";
 import { useSse } from "../../lib/useSse";
-import { formatDuration } from "../../lib/time";
+import { formatDuration, formatTimestamp } from "../../lib/time";
 import {
   defaultModelConfig,
   applyPreset,
@@ -103,6 +103,7 @@ export default function PretrainPage() {
 
   const ssePath = job ? `/api/pretrain/jobs/${job.job_id}/events` : undefined;
   const { lastEvent, error: sseError } = useSse(ssePath, Boolean(job));
+  const withTimestamp = (message: string) => `[${formatTimestamp()}] ${message}`;
 
   useEffect(() => {
     if (!lastEvent) {
@@ -134,19 +135,19 @@ export default function PretrainPage() {
     }
     if (lastEvent.type === "checkpoint") {
       const payload = lastEvent.payload as { iter: number };
-      setLogs((prev) => [`Checkpoint saved at ${payload.iter}`, ...prev].slice(0, 200));
+      setLogs((prev) => [withTimestamp(`Checkpoint saved at ${payload.iter}`), ...prev].slice(0, 200));
     }
     if (lastEvent.type === "eval") {
       const payload = lastEvent.payload as { iter?: number; train_loss?: number; val_loss?: number };
       const iter = payload.iter ?? "?";
       const train = payload.train_loss?.toFixed?.(4) ?? "-";
       const val = payload.val_loss?.toFixed?.(4) ?? "-";
-      setLogs((prev) => [`Eval @ ${iter}: train ${train}, val ${val}`, ...prev].slice(0, 200));
+      setLogs((prev) => [withTimestamp(`Eval @ ${iter}: train ${train}, val ${val}`), ...prev].slice(0, 200));
     }
     if (lastEvent.type === "log") {
       const payload = lastEvent.payload as { message?: string };
       if (payload?.message) {
-        setLogs((prev) => [payload.message, ...prev].slice(0, 200));
+        setLogs((prev) => [withTimestamp(payload.message), ...prev].slice(0, 200));
       }
     }
     if (lastEvent.type === "done") {
@@ -352,7 +353,7 @@ export default function PretrainPage() {
         body: JSON.stringify({
           sample_index: index,
           max_tokens: inspectMaxTokens,
-          top_k: 5,
+          top_k: 10,
         }),
       });
       setInspectData(data);
@@ -425,7 +426,7 @@ export default function PretrainPage() {
       return;
     }
     inspectThrottleRef.current = now;
-    inspectBatch(0, true);
+    refreshInspect(0, true);
   }, [lastEvent, job]);
 
   useEffect(() => {
@@ -1139,16 +1140,21 @@ export default function PretrainPage() {
               <div>
                 <label>Target (Next Token)</label>
                 <div className="card" style={{ boxShadow: "none", background: "var(--card-muted)" }}>
-                  <p>{inspectData.target_token || "-"}</p>
+                  <div className="inspect-target">{inspectData.target_token || "-"}</div>
                   {inspectData.actual_rank !== null && inspectData.actual_rank !== undefined && (
-                    <p>
-                      Rank #{inspectData.actual_rank} • {((inspectData.actual_prob || 0) * 100).toFixed(2)}%
-                    </p>
+                    <div className="inspect-row inspect-rank" style={{ marginTop: 10 }}>
+                      <span className="inspect-rank-label">Rank #{inspectData.actual_rank}</span>
+                      <span className="inspect-value inspect-rank-value">
+                        {((inspectData.actual_prob || 0) * 100).toFixed(2)}%
+                      </span>
+                    </div>
                   )}
-                  <div style={{ marginTop: 12 }}>
+                  <div className="inspect-preds">
+                    <div className="inspect-subtitle">Top 10 predictions</div>
                     {inspectData.top_predictions?.map((pred, idx) => (
-                      <div key={`${pred.token}-${idx}`} className="badge" style={{ marginRight: 8 }}>
-                        {pred.token} ({(pred.prob * 100).toFixed(1)}%)
+                      <div key={`${pred.token}-${idx}`} className="inspect-row">
+                        <span className="inspect-token">{pred.token}</span>
+                        <span className="inspect-value">{(pred.prob * 100).toFixed(1)}%</span>
                       </div>
                     ))}
                   </div>

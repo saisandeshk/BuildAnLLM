@@ -16,9 +16,10 @@ export default function TokenRainbow({ tokens }: { tokens: string[] }) {
           key={`${token}-${idx}`}
           style={{
             background: colors[idx],
-            padding: "2px 6px",
+            padding: "1px 6px",
             marginRight: 4,
-            borderRadius: 6,
+            marginBottom: 4,
+            borderRadius: 4,
             display: "inline-block",
             color: "#0b0b0c",
           }}

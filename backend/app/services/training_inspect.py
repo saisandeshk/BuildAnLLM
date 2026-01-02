@@ -13,7 +13,7 @@ def build_pretrain_inspect(
     job: TrainingJob,
     sample_index: int = 0,
     max_tokens: Optional[int] = None,
-    top_k: int = 5,
+    top_k: int = 10,
 ) -> Dict[str, Any]:
     input_ids, target_ids, _ = _get_sample(job, sample_index, max_tokens)
     tokenizer = _get_tokenizer(job)

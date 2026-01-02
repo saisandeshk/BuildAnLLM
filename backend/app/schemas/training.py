@@ -63,7 +63,7 @@ class JobStepRequest(BaseModel):
 class InspectRequest(BaseModel):
     sample_index: int = 0
     max_tokens: int | None = None
-    top_k: int = 5
+    top_k: int = 10
 
     model_config = ConfigDict(populate_by_name=True)
 
