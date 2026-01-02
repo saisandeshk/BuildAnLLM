@@ -953,3 +953,26 @@ input[type="range"]:disabled {
     text-align: center;
   }
 }
+
+/* Footer */
+footer.site-footer {
+  text-align: center;
+  padding: 32px;
+  border-top: 1px solid var(--stroke);
+  color: var(--ink-2);
+  font-size: 14px;
+  background: var(--bg-1);
+  font-family: var(--font-mono), "IBM Plex Mono", "SFMono-Regular", Menlo, monospace;
+}
+
+footer.site-footer a {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.2s ease;
+}
+
+footer.site-footer a:hover {
+  color: var(--accent-2);
+  text-decoration: underline;
+}

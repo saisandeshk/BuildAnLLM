@@ -23,7 +23,6 @@ type ConfigSection = {
 };
 
 const LABELS: Record<string, string> = {
-  architecture: "Architecture",
   positional_encoding: "Positional Encoding",
   normalization: "Normalization",
   activation: "Activation",
@@ -54,7 +53,7 @@ const LABELS: Record<string, string> = {
 const SECTION_DEFS: Array<{ title: string; keys: string[] }> = [
   {
     title: "Components",
-    keys: ["architecture", "positional_encoding", "normalization", "activation", "attention_type", "tokenizer_type"],
+    keys: ["positional_encoding", "normalization", "activation", "attention_type", "tokenizer_type"],
   },
   {
     title: "Dimensions",

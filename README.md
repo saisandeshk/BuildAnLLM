@@ -1452,7 +1452,7 @@ Output: [batch, posn, d_model]
 
 #### Implementation
 
-The model automatically selects components based on `cfg.architecture`:
+The model automatically selects components based on `cfg.positional_encoding` and related settings:
 
 ```python
 def forward(self, tokens):

@@ -58,7 +58,6 @@ export default function InferencePage() {
   const [isDiagnosticsLoading, setIsDiagnosticsLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const streamAbortRef = useRef<AbortController | null>(null);
-  const autoLoadedRef = useRef(false);
   const { activeSection, setActiveSection } = useScrollSpy(inferenceSections);
 
   const generatedCount = Math.max(0, generatedText.length - prompt.length);
@@ -88,10 +87,9 @@ export default function InferencePage() {
   }, [sortedCheckpoints, selectedCheckpoint]);
 
   useEffect(() => {
-    if (!selectedCheckpoint || autoLoadedRef.current) {
+    if (!selectedCheckpoint) {
       return;
     }
-    autoLoadedRef.current = true;
     loadSession();
   }, [selectedCheckpoint]);
 
@@ -331,7 +329,6 @@ export default function InferencePage() {
                 </option>
               ))}
             </select>
-            <button className="primary" onClick={loadSession}>Load Model</button>
           </div>
 
           {session && (

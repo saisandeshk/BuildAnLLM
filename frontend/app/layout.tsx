@@ -35,6 +35,16 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           <Nav />
         </header>
         <main>{children}</main>
+        <footer className="site-footer">
+          Created by{" "}
+          <a
+            href="https://www.girish.xyz"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Girish Gupta
+          </a>
+        </footer>
       </body>
     </html>
   );

@@ -41,16 +41,18 @@ selected_checkpoint = render_checkpoint_selector(
     no_checkpoints_message="No checkpoints found. Please train a model first."
 )
 
-# Load model button
-load_model = st.button("📥 Load Model", type="primary")
+selected_checkpoint_path = selected_checkpoint["path"] if selected_checkpoint else None
+should_load_model = (
+    selected_checkpoint_path
+    and st.session_state.get("current_checkpoint_path") != selected_checkpoint_path
+)
 
-if load_model or st.session_state.current_model is not None:
-    if load_model:
-        with st.spinner("Loading model..."):
-            device = get_device()
-            model, cfg, checkpoint = load_model_from_checkpoint(
-                selected_checkpoint["path"], device
-            )
+if should_load_model:
+    with st.spinner("Loading model..."):
+        device = get_device()
+        model, cfg, checkpoint = load_model_from_checkpoint(
+            selected_checkpoint["path"], device
+        )
 
         tokenizer_type = checkpoint.get("tokenizer_type", "character")
 
@@ -114,6 +116,7 @@ if load_model or st.session_state.current_model is not None:
         st.session_state.current_model = model
         st.session_state.current_tokenizer = tokenizer
         st.session_state.current_cfg = cfg
+        st.session_state.current_checkpoint_path = selected_checkpoint_path
 
         param_count = sum(p.numel() for p in model.parameters()) / 1e6
         st.success(
@@ -158,7 +161,7 @@ if load_model or st.session_state.current_model is not None:
                 model_details["Tokenizer"] = checkpoint["tokenizer_type"]
             st.json(model_details)
 
-    if st.session_state.current_model is not None:
+if st.session_state.current_model is not None:
 
         # Inference controls
         st.header("2. Settings")

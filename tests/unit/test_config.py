@@ -1,7 +1,7 @@
 """Unit tests for configuration classes."""
 
 import pytest
-from config import ModelConfig, Architecture, PositionalEncoding, Normalization, Activation, RouterType
+from config import ModelConfig, PositionalEncoding, Normalization, Activation, RouterType
 from pretraining.training.training_args import TransformerTrainingArgs
 from finetuning.training.finetuning_args import FinetuningArgs
 
@@ -11,25 +11,30 @@ class TestModelConfig:
     """Tests for ModelConfig."""
 
     def test_init_gpt(self):
-        """Test GPT config initialization."""
-        cfg = ModelConfig(architecture=Architecture.GPT)
-        assert cfg.architecture == Architecture.GPT
+        """Test default config initialization."""
+        cfg = ModelConfig()
         assert cfg.positional_encoding == PositionalEncoding.LEARNED
         assert cfg.normalization == Normalization.LAYERNORM
         assert cfg.activation == Activation.GELU
 
     def test_init_llama(self):
-        """Test LLaMA config initialization."""
-        cfg = ModelConfig(architecture=Architecture.LLAMA)
-        assert cfg.architecture == Architecture.LLAMA
+        """Test LLaMA-style config initialization."""
+        cfg = ModelConfig(
+            positional_encoding=PositionalEncoding.ROPE,
+            normalization=Normalization.RMSNORM,
+            activation=Activation.SWIGLU,
+        )
         assert cfg.positional_encoding == PositionalEncoding.ROPE
         assert cfg.normalization == Normalization.RMSNORM
         assert cfg.activation == Activation.SWIGLU
 
     def test_init_olmo(self):
-        """Test OLMo config initialization."""
-        cfg = ModelConfig(architecture=Architecture.OLMO)
-        assert cfg.architecture == Architecture.OLMO
+        """Test OLMo-style config initialization."""
+        cfg = ModelConfig(
+            positional_encoding=PositionalEncoding.ALIBI,
+            normalization=Normalization.LAYERNORM,
+            activation=Activation.SWIGLU,
+        )
         assert cfg.positional_encoding == PositionalEncoding.ALIBI
         assert cfg.normalization == Normalization.LAYERNORM
         assert cfg.activation == Activation.SWIGLU
@@ -37,33 +42,33 @@ class TestModelConfig:
     def test_gpt_small(self):
         """Test GPT small preset."""
         cfg = ModelConfig.gpt_small()
-        assert cfg.architecture == Architecture.GPT
         assert cfg.d_model == 256
         assert cfg.n_heads == 4
         assert cfg.n_layers == 4
+        assert cfg.positional_encoding == PositionalEncoding.LEARNED
 
     def test_llama_small(self):
         """Test LLaMA small preset."""
         cfg = ModelConfig.llama_small()
-        assert cfg.architecture == Architecture.LLAMA
         assert cfg.d_model == 256
         assert cfg.n_heads == 4
         assert cfg.n_layers == 4
+        assert cfg.positional_encoding == PositionalEncoding.ROPE
 
     def test_olmo_small(self):
         """Test OLMo small preset."""
         cfg = ModelConfig.olmo_small()
-        assert cfg.architecture == Architecture.OLMO
         assert cfg.d_model == 256
         assert cfg.n_heads == 4
         assert cfg.n_layers == 4
+        assert cfg.positional_encoding == PositionalEncoding.ALIBI
 
     def test_to_dict(self):
         """Test config to dict conversion."""
         cfg = ModelConfig.gpt_small()
         cfg_dict = cfg.to_dict()
         assert isinstance(cfg_dict, dict)
-        assert cfg_dict['architecture'] == 'gpt'
+        assert "architecture" not in cfg_dict
         assert cfg_dict['d_model'] == 256
 
     def test_from_dict(self):
@@ -71,12 +76,11 @@ class TestModelConfig:
         cfg = ModelConfig.gpt_small()
         cfg_dict = cfg.to_dict()
         cfg_reconstructed = ModelConfig.from_dict(cfg_dict)
-        assert cfg_reconstructed.architecture == cfg.architecture
         assert cfg_reconstructed.d_model == cfg.d_model
 
     def test_moe_config(self):
         """Test MoE configuration."""
-        cfg = ModelConfig(architecture=Architecture.LLAMA, use_moe=True)
+        cfg = ModelConfig(use_moe=True)
         assert cfg.use_moe
         assert cfg.num_experts == 8
         assert cfg.num_experts_per_tok == 2
@@ -85,7 +89,6 @@ class TestModelConfig:
     def test_moe_with_shared_experts(self):
         """Test MoE with shared experts."""
         cfg = ModelConfig(
-            architecture=Architecture.LLAMA,
             use_moe=True,
             use_shared_experts=True
         )
@@ -94,7 +97,7 @@ class TestModelConfig:
 
     def test_gqa_config(self):
         """Test GQA configuration."""
-        cfg = ModelConfig(architecture=Architecture.LLAMA, n_heads=8, n_kv_heads=2)
+        cfg = ModelConfig(n_heads=8, n_kv_heads=2)
         assert cfg.n_heads == 8
         assert cfg.n_kv_heads == 2
         assert cfg.n_heads % cfg.n_kv_heads == 0
@@ -102,17 +105,17 @@ class TestModelConfig:
     def test_invalid_n_kv_heads(self):
         """Test invalid n_kv_heads raises error."""
         with pytest.raises(ValueError):
-            ModelConfig(architecture=Architecture.LLAMA, n_heads=8, n_kv_heads=3)  # Not divisible
+            ModelConfig(n_heads=8, n_kv_heads=3)  # Not divisible
 
     def test_n_kv_heads_greater_than_n_heads(self):
         """Test n_kv_heads > n_heads raises error."""
         with pytest.raises(ValueError):
-            ModelConfig(architecture=Architecture.LLAMA, n_heads=4, n_kv_heads=8)
+            ModelConfig(n_heads=4, n_kv_heads=8)
 
     def test_rope_requires_even_d_head(self):
         """Test RoPE requires even d_head."""
         with pytest.raises(ValueError):
-            ModelConfig(architecture=Architecture.LLAMA, d_head=63)
+            ModelConfig(positional_encoding=PositionalEncoding.ROPE, d_head=63)
 
 
 @pytest.mark.unit

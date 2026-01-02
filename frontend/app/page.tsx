@@ -55,17 +55,23 @@ export default async function OverviewPage() {
 
       <section className="section">
         <div className="section-title">
-          <h2>Project README</h2>
-          <p>Reference notes from the repository.</p>
+          <h2>README</h2>
+          {/* <p>Reference notes from the repository.</p> */}
         </div>
         <div className="card" style={{ padding: 24 }}>
-          {/* {readme ? (
-            <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
-              {readme}
-            </ReactMarkdown>
+          {readme ? (
+<ReactMarkdown 
+  remarkPlugins={[remarkGfm, remarkMath]} 
+  rehypePlugins={[rehypeKatex]}
+  components={{
+    img: () => null
+  }}
+>
+  {readme}
+</ReactMarkdown>
           ) : (
             <p>README.md not found.</p>
-          )} */}
+          )}
         </div>
       </section>
     </>

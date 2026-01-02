@@ -28,7 +28,7 @@ import torch.nn as nn
 from jaxtyping import Float, Int
 from torch import Tensor
 from typing import Optional, Union, Tuple
-from config import Architecture, PositionalEncoding
+from config import PositionalEncoding
 from pretraining.embeddings.embed import EmbedWithoutTorch, EmbedWithTorch, UnembedWithoutTorch, UnembedWithTorch
 from pretraining.positional_embeddings.positional_embedding import PosEmbed
 from pretraining.transformer_blocks.transformer_block import create_transformer_block

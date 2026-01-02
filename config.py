@@ -3,12 +3,6 @@ from enum import Enum
 from typing import Union
 
 
-class Architecture(str, Enum):
-    GPT = "gpt"
-    LLAMA = "llama"
-    OLMO = "olmo"
-
-
 class PositionalEncoding(str, Enum):
     LEARNED = "learned"  # Learned positional embeddings (GPT style)
     ROPE = "rope"  # Rotary Position Embedding (LLaMA style)
@@ -33,9 +27,6 @@ class RouterType(str, Enum):
 
 @dataclass
 class ModelConfig:
-    # Architecture selection (required - no default)
-    architecture: Architecture
-
     # Model dimensions
     d_model: int = 768
     debug: bool = True
@@ -49,7 +40,7 @@ class ModelConfig:
     n_kv_heads: int = None  # Number of KV heads for GQA/MQA (None = n_heads for MHA)
     n_layers: int = 12
 
-    # Configurable model components (if None, will be set based on architecture)
+    # Configurable model components (if None, default to GPT-style settings)
     positional_encoding: Union[PositionalEncoding, None] = None
     normalization: Union[Normalization, None] = None
     activation: Union[Activation, None] = None
@@ -68,28 +59,15 @@ class ModelConfig:
     expert_capacity_factor: float = 1.25  # Capacity factor for expert load balancing
 
     def __post_init__(self):
-        """Set defaults based on architecture if not explicitly provided"""
+        """Set defaults if not explicitly provided."""
         if self.positional_encoding is None:
-            if self.architecture == Architecture.GPT:
-                self.positional_encoding = PositionalEncoding.LEARNED
-            elif self.architecture == Architecture.LLAMA:
-                self.positional_encoding = PositionalEncoding.ROPE
-            elif self.architecture == Architecture.OLMO:
-                self.positional_encoding = PositionalEncoding.ALIBI
-            else:
-                self.positional_encoding = PositionalEncoding.NONE
+            self.positional_encoding = PositionalEncoding.LEARNED
 
         if self.normalization is None:
-            if self.architecture == Architecture.LLAMA:
-                self.normalization = Normalization.RMSNORM
-            else:  # GPT, OLMO
-                self.normalization = Normalization.LAYERNORM
+            self.normalization = Normalization.LAYERNORM
 
         if self.activation is None:
-            if self.architecture == Architecture.GPT:
-                self.activation = Activation.GELU
-            else:  # LLaMA, OLMo
-                self.activation = Activation.SWIGLU
+            self.activation = Activation.GELU
 
         if self.positional_encoding == PositionalEncoding.ROPE and self.d_head % 2 != 0:
             raise ValueError("d_head must be even when using RoPE.")
@@ -116,7 +94,6 @@ class ModelConfig:
     def gpt_small(cls):
         """Small GPT config for faster training/testing (good for Mac)"""
         return cls(
-            architecture=Architecture.GPT,
             d_model=256,
             n_heads=4,
             n_layers=4,
@@ -130,7 +107,6 @@ class ModelConfig:
     def gpt_medium(cls):
         """Medium GPT config (between small and full)"""
         return cls(
-            architecture=Architecture.GPT,
             d_model=512,
             n_heads=8,
             n_layers=6,
@@ -144,7 +120,6 @@ class ModelConfig:
     def gpt_full(cls):
         """Full GPT-2 size config"""
         return cls(
-            architecture=Architecture.GPT,
             d_model=768,
             n_heads=12,
             n_layers=12,
@@ -158,7 +133,9 @@ class ModelConfig:
     def llama_small(cls):
         """Small LLaMA config for faster training/testing"""
         return cls(
-            architecture=Architecture.LLAMA,
+            positional_encoding=PositionalEncoding.ROPE,
+            normalization=Normalization.RMSNORM,
+            activation=Activation.SWIGLU,
             d_model=256,
             n_heads=4,
             n_layers=4,
@@ -173,7 +150,9 @@ class ModelConfig:
     def llama_medium(cls):
         """Medium LLaMA config (between small and full)"""
         return cls(
-            architecture=Architecture.LLAMA,
+            positional_encoding=PositionalEncoding.ROPE,
+            normalization=Normalization.RMSNORM,
+            activation=Activation.SWIGLU,
             d_model=512,
             n_heads=8,
             n_layers=6,
@@ -188,7 +167,9 @@ class ModelConfig:
     def llama_full(cls):
         """Full LLaMA config"""
         return cls(
-            architecture=Architecture.LLAMA,
+            positional_encoding=PositionalEncoding.ROPE,
+            normalization=Normalization.RMSNORM,
+            activation=Activation.SWIGLU,
             d_model=768,
             n_heads=12,
             n_layers=12,
@@ -203,7 +184,9 @@ class ModelConfig:
     def olmo_small(cls):
         """Small OLMo config for faster training/testing"""
         return cls(
-            architecture=Architecture.OLMO,
+            positional_encoding=PositionalEncoding.ALIBI,
+            normalization=Normalization.LAYERNORM,
+            activation=Activation.SWIGLU,
             d_model=256,
             n_heads=4,
             n_layers=4,
@@ -217,7 +200,9 @@ class ModelConfig:
     def olmo_medium(cls):
         """Medium OLMo config (between small and full)"""
         return cls(
-            architecture=Architecture.OLMO,
+            positional_encoding=PositionalEncoding.ALIBI,
+            normalization=Normalization.LAYERNORM,
+            activation=Activation.SWIGLU,
             d_model=512,
             n_heads=8,
             n_layers=6,
@@ -231,7 +216,9 @@ class ModelConfig:
     def olmo_full(cls):
         """Full OLMo config"""
         return cls(
-            architecture=Architecture.OLMO,
+            positional_encoding=PositionalEncoding.ALIBI,
+            normalization=Normalization.LAYERNORM,
+            activation=Activation.SWIGLU,
             d_model=768,
             n_heads=12,
             n_layers=12,
@@ -245,9 +232,6 @@ class ModelConfig:
         """Convert config to dict with enum values as strings for serialization."""
         from dataclasses import asdict
         config_dict = asdict(self)
-        # Convert enum values to strings
-        if isinstance(config_dict.get("architecture"), Enum):
-            config_dict["architecture"] = config_dict["architecture"].value
         # Handle positional_encoding
         pos_enc = config_dict.get("positional_encoding")
         if isinstance(pos_enc, Enum):
@@ -270,10 +254,11 @@ class ModelConfig:
     @classmethod
     def from_dict(cls, config_dict):
         """Reconstruct config from dict with proper enum reconstruction."""
+        config_dict = dict(config_dict)
+        from dataclasses import fields
+        allowed = {field.name for field in fields(cls)}
+        config_dict = {key: value for key, value in config_dict.items() if key in allowed}
         # Convert string enum values back to enum instances
-        if "architecture" in config_dict and isinstance(config_dict["architecture"], str):
-            config_dict["architecture"] = Architecture(
-                config_dict["architecture"])
         if "positional_encoding" in config_dict:
             pos_enc = config_dict["positional_encoding"]
             if isinstance(pos_enc, str):
@@ -308,7 +293,6 @@ class ModelConfig:
     def from_ui_dict(cls, model_config: dict):
         """Create ModelConfig from UI config dict (helper for Streamlit UI)."""
         return cls(
-            architecture=Architecture.GPT,  # Base, usually doesn't matter for this educational repo usage or is overriden? actually looking at usage in Pre-Training.py it hardcodes GPT.
             d_model=model_config["d_model"],
             n_heads=model_config["n_heads"],
             # Default to MHA if not specified

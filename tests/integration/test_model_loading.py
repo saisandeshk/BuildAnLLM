@@ -3,6 +3,7 @@
 import pytest
 import torch
 import os
+from config import PositionalEncoding
 from pretraining.model.model_loader import load_model_from_checkpoint
 from pretraining.model.model import TransformerModel
 
@@ -62,7 +63,7 @@ class TestModelLoading:
         torch.save(checkpoint, checkpoint_path)
         
         loaded_model, loaded_cfg, _ = load_model_from_checkpoint(checkpoint_path, device)
-        assert loaded_cfg.architecture.value == "llama"
+        assert loaded_cfg.positional_encoding == PositionalEncoding.ROPE
 
     def test_load_missing_checkpoint(self, device):
         """Test loading non-existent checkpoint."""
@@ -88,4 +89,3 @@ class TestModelLoading:
         # Should still load but skip mismatched keys
         loaded_model, _, _ = load_model_from_checkpoint(checkpoint_path, device)
         assert isinstance(loaded_model, TransformerModel)
-
