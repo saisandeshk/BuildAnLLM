@@ -435,7 +435,7 @@ export default function FinetunePage() {
       <div className="page-content">
         <section id="checkpoint" className="section scroll-section">
         <div className="section-title">
-          <h2>Select Checkpoint</h2>
+          <h2>Select Model</h2>
           <p>Pick a pre-trained checkpoint to fine-tune.</p>
         </div>
         <div className="card">

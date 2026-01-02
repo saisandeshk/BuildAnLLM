@@ -1,12 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import CodePanel from "../../components/CodePanel";
 import Heatmap from "../../components/Heatmap";
 import LineChart from "../../components/LineChart";
 import RangeSlider from "../../components/RangeSlider";
+import SideNav from "../../components/SideNav";
 import StatCard from "../../components/StatCard";
 import { Checkpoint, CodeSnippet, fetchJson } from "../../lib/api";
+import { API_BASE_URL } from "../../lib/env";
+import { useScrollSpy } from "../../lib/useScrollSpy";
 import { formatCheckpointTimestamp } from "../../lib/time";
 import MarkdownBlock from "../../components/MarkdownBlock";
 import { inferenceEquations } from "../../lib/equations";
@@ -23,6 +26,14 @@ type DiagnosticsMeta = {
   token_ids: number[];
   token_labels: string[];
 };
+
+const inferenceSections = [
+  { id: "select-model", label: "Model" },
+  { id: "generation-settings", label: "Generate" },
+  { id: "understand", label: "Understand" },
+  { id: "generated-text", label: "Output" },
+  { id: "model-internals", label: "Internals" },
+];
 
 export default function InferencePage() {
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
@@ -45,6 +56,10 @@ export default function InferencePage() {
   const [snippetsLoading, setSnippetsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isDiagnosticsLoading, setIsDiagnosticsLoading] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const streamAbortRef = useRef<AbortController | null>(null);
+  const autoLoadedRef = useRef(false);
+  const { activeSection, setActiveSection } = useScrollSpy(inferenceSections);
 
   const generatedCount = Math.max(0, generatedText.length - prompt.length);
 
@@ -52,6 +67,12 @@ export default function InferencePage() {
     fetchJson<{ checkpoints: Checkpoint[] }>("/api/checkpoints")
       .then((data) => setCheckpoints(data.checkpoints))
       .catch((err) => setError((err as Error).message));
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      streamAbortRef.current?.abort();
+    };
   }, []);
 
   const sortedCheckpoints = useMemo(
@@ -66,8 +87,19 @@ export default function InferencePage() {
     setSelectedCheckpoint(sortedCheckpoints[0].id);
   }, [sortedCheckpoints, selectedCheckpoint]);
 
+  useEffect(() => {
+    if (!selectedCheckpoint || autoLoadedRef.current) {
+      return;
+    }
+    autoLoadedRef.current = true;
+    loadSession();
+  }, [selectedCheckpoint]);
+
   const loadSession = async () => {
     setError(null);
+    streamAbortRef.current?.abort();
+    streamAbortRef.current = null;
+    setIsGenerating(false);
     try {
       if (!selectedCheckpoint) {
         throw new Error("Select a checkpoint first.");
@@ -91,9 +123,14 @@ export default function InferencePage() {
   const generate = async () => {
     if (!session) return;
     setError(null);
+    streamAbortRef.current?.abort();
+    const controller = new AbortController();
+    streamAbortRef.current = controller;
+    setIsGenerating(true);
+    setGeneratedText(prompt);
     try {
-      const data = await fetchJson<{ generated_text: string }>(
-        `/api/inference/sessions/${session.session_id}/generate`,
+      const res = await fetch(
+        `${API_BASE_URL}/api/inference/sessions/${session.session_id}/generate/stream`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -104,11 +141,77 @@ export default function InferencePage() {
             top_k: topK === "" ? null : topK,
             top_p: topP,
           }),
+          signal: controller.signal,
         }
       );
-      setGeneratedText(data.generated_text);
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || `Request failed with ${res.status}`);
+      }
+      const reader = res.body?.getReader();
+      if (!reader) {
+        throw new Error("Streaming not supported in this browser.");
+      }
+      const decoder = new TextDecoder();
+      let buffer = "";
+      const flushBuffer = () => {
+        let idx = buffer.indexOf("\n\n");
+        while (idx !== -1) {
+          const chunk = buffer.slice(0, idx);
+          buffer = buffer.slice(idx + 2);
+          const lines = chunk.split("\n");
+          let eventType = "message";
+          const dataLines: string[] = [];
+          for (const line of lines) {
+            if (line.startsWith("event:")) {
+              eventType = line.slice(6).trim();
+            } else if (line.startsWith("data:")) {
+              let dataLine = line.slice(5);
+              if (dataLine.startsWith(" ")) {
+                dataLine = dataLine.slice(1);
+              }
+              dataLines.push(dataLine);
+            }
+          }
+          const dataStr = dataLines.join("\n");
+          if (!dataStr) {
+            idx = buffer.indexOf("\n\n");
+            continue;
+          }
+          let payload: { token?: string; message?: string } | null = null;
+          try {
+            payload = JSON.parse(dataStr) as { token?: string; message?: string };
+          } catch {
+            payload = { token: dataStr };
+          }
+          if (eventType === "token") {
+            const token = payload.token ?? "";
+            if (token) {
+              setGeneratedText((prev) => prev + token);
+            }
+          }
+          if (eventType === "error" && payload.message) {
+            setError(payload.message);
+          }
+          idx = buffer.indexOf("\n\n");
+        }
+      };
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) {
+          break;
+        }
+        buffer += decoder.decode(value, { stream: true });
+        flushBuffer();
+      }
     } catch (err) {
-      setError((err as Error).message);
+      if ((err as Error).name !== "AbortError") {
+        setError((err as Error).message);
+      }
+    } finally {
+      setIsGenerating(false);
+      streamAbortRef.current = null;
     }
   };
 
@@ -205,8 +308,15 @@ export default function InferencePage() {
   }, []);
 
   return (
-    <>
-      <section className="section">
+    <div className="page-with-nav">
+      <SideNav
+        sections={inferenceSections}
+        activeId={activeSection}
+        onNavigate={setActiveSection}
+        ariaLabel="Inference sections"
+      />
+      <div className="page-content">
+        <section id="select-model" className="section scroll-section">
         <div className="section-title">
           <h2>Select Model</h2>
           <p>Load a checkpoint for inference.</p>
@@ -257,7 +367,7 @@ export default function InferencePage() {
         </div>
       </section>
 
-      <section className="section">
+      <section id="generation-settings" className="section scroll-section">
         <div className="section-title">
           <h2>Generation Settings</h2>
           <p>Sampling controls for text generation.</p>
@@ -292,13 +402,15 @@ export default function InferencePage() {
             </div>
           </div>
           <div className="inline-row" style={{ marginTop: 12 }}>
-            <button className="primary" onClick={generate} disabled={!session}>Generate</button>
+            <button className="primary" onClick={generate} disabled={!session || isGenerating}>
+              {isGenerating ? "Generating..." : "Generate"}
+            </button>
           </div>
           {error && <p style={{ color: "#b42318" }}>{error}</p>}
         </div>
       </section>
 
-      <section className="section">
+      <section id="understand" className="section scroll-section">
         <div className="section-title">
           <h2>Understand</h2>
           <p>Sampling equations and references.</p>
@@ -325,9 +437,9 @@ export default function InferencePage() {
         </div>
       </section>
 
-      <section className="section">
+      <section id="generated-text" className="section scroll-section">
         <div className="section-title">
-          <h2>Generated Text</h2>
+          <h2>Output</h2>
           <p>Model output based on your prompt.</p>
         </div>
         <div className="card">
@@ -340,9 +452,9 @@ export default function InferencePage() {
         </div>
       </section>
 
-      <section className="section">
+      <section id="model-internals" className="section scroll-section">
         <div className="section-title">
-          <h2>Model Internals</h2>
+          <h2>Internals</h2>
           <p>Attention, logit lens, and layer norms.</p>
         </div>
         <div className="card">
@@ -434,6 +546,7 @@ export default function InferencePage() {
           )}
         </div>
       </section>
-    </>
+      </div>
+    </div>
   );
 }

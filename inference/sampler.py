@@ -340,6 +340,56 @@ class TransformerSampler:
         return self.tokenizer.decode(generated_tokens)
 
     @torch.no_grad()
+    def sample_stream(
+        self,
+        prompt: str,
+        max_new_tokens: int = 100,
+        temperature: float = 1.0,
+        top_k: Optional[int] = None,
+        top_p: Optional[float] = None,
+    ):
+        """Stream generated tokens for a prompt."""
+        tokens = self.tokenizer.encode(prompt)
+
+        n_ctx = self.model.cfg.n_ctx if hasattr(self.model, 'cfg') else 1024
+        if len(tokens) > n_ctx:
+            tokens = tokens[-n_ctx:]
+
+        tokens_tensor = torch.tensor([tokens], dtype=torch.long, device=self.device)
+        logits, kv_cache, use_cache, start_pos = self._process_prompt(tokens_tensor)
+
+        for _ in range(max_new_tokens):
+            next_token = self._generate_next_token(
+                logits, temperature, top_k, top_p)
+            token_id = int(next_token.item())
+
+            if hasattr(self.tokenizer, 'vocab_size'):
+                vocab_size = self.tokenizer.vocab_size
+                token_id = min(token_id, vocab_size - 1)
+
+            tokens_tensor = torch.cat(
+                [tokens_tensor, next_token.unsqueeze(0)], dim=1)
+
+            if tokens_tensor.shape[1] > n_ctx:
+                tokens_tensor = tokens_tensor[:, -n_ctx:]
+                kv_cache = None
+                use_cache = False
+                start_pos = 0
+
+            logits, kv_cache, use_cache = self._update_cache(
+                tokens_tensor, kv_cache, start_pos, use_cache
+            )
+            start_pos += 1
+
+            try:
+                token_text = self.tokenizer.decode([token_id])
+            except Exception:
+                token_text = f"T{token_id}"
+
+            if token_text:
+                yield token_text
+
+    @torch.no_grad()
     def sample_batch(
         self,
         prompts: list[str],

@@ -29,6 +29,26 @@ def generate_text(
     )
 
 
+def generate_text_stream(
+    model,
+    tokenizer,
+    device: torch.device,
+    prompt: str,
+    max_new_tokens: int,
+    temperature: float,
+    top_k: int | None,
+    top_p: float | None,
+):
+    sampler = TransformerSampler(model=model, tokenizer=tokenizer, device=device)
+    return sampler.sample_stream(
+        prompt=prompt,
+        max_new_tokens=max_new_tokens,
+        temperature=temperature,
+        top_k=top_k,
+        top_p=top_p,
+    )
+
+
 def build_diagnostics(model, tokenizer, device: torch.device, prompt: str) -> Dict[str, Any]:
     tokens = tokenizer.encode_tensor(prompt).to(device).unsqueeze(0)
     with torch.no_grad():

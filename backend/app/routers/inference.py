@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import StreamingResponse
 
 from backend.app.core.state import inference_registry
 from backend.app.schemas.inference import DiagnosticsRequest, GenerateRequest, InferenceSessionRequest
@@ -12,6 +14,7 @@ from backend.app.services.checkpoints import resolve_checkpoint_path
 from backend.app.services.inference import (
     build_diagnostics,
     generate_text,
+    generate_text_stream,
     get_attention_map,
     get_layer_norms,
     get_logit_lens,
@@ -82,6 +85,37 @@ async def generate(session_id: str, request: GenerateRequest) -> dict:
         "generated_text": text,
         "new_characters": max(0, len(text) - len(request.prompt)),
     }
+
+
+@router.post("/sessions/{session_id}/generate/stream")
+async def generate_stream(session_id: str, request: GenerateRequest) -> StreamingResponse:
+    session = inference_registry.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    device = next(session.model.parameters()).device
+    token_stream = generate_text_stream(
+        session.model,
+        session.tokenizer,
+        device,
+        request.prompt,
+        request.max_new_tokens,
+        request.temperature,
+        request.top_k,
+        request.top_p,
+    )
+
+    def event_stream():
+        yield _format_sse("start", {"prompt": request.prompt})
+        try:
+            for token in token_stream:
+                yield _format_sse("token", {"token": token})
+        except Exception as exc:
+            yield _format_sse("error", {"message": str(exc)})
+            return
+        yield _format_sse("done", {"status": "ok"})
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 @router.post("/sessions/{session_id}/diagnostics")
@@ -175,3 +209,8 @@ def _find_diagnostics(diag_id: str):
         if diag_id in session.diagnostics:
             return session, session.diagnostics[diag_id]
     return None, None
+
+
+def _format_sse(event: str, data: dict) -> str:
+    payload = json.dumps(data)
+    return f"event: {event}\ndata: {payload}\n\n"
