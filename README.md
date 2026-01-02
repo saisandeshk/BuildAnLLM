@@ -45,20 +45,6 @@ The app will open in your browser with the following pages:
 - **Inference Page**: Generate text from trained models (pre-trained or fine-tuned)
 - **Playground**
 
-### Testing
-
-Complete test run (from repo root):
-
-```bash
-# one-time for Playwright
-(cd frontend && npx playwright install)
-
-uv run pytest
-(cd frontend && npm run test:run && npm run test:e2e)
-```
-
-Smoke E2E tests mock the backend by default. See `tests/README.md` and `frontend/test/README.md`.
-
 ### Pre-Training
 
 1. Loads training text file
@@ -1466,6 +1452,16 @@ def forward(self, tokens):
         return logits, total_aux_loss
     return logits
 ```
+
+---
+
+## Tests
+
+```bash
+./test.sh
+```
+
+See `tests/README.md` and `frontend/test/README.md` for details.
 
 ---
 
