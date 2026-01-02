@@ -4,13 +4,18 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import CodePanel from "../../components/CodePanel";
 import Heatmap from "../../components/Heatmap";
 import LineChart from "../../components/LineChart";
+import LogBox from "../../components/LogBox";
+import RangeSlider from "../../components/RangeSlider";
+import SideNav from "../../components/SideNav";
 import StatCard from "../../components/StatCard";
 import TokenSegments from "../../components/TokenSegments";
+import TrainingControls from "../../components/TrainingControls";
 import { fetchJson, makeFormData, Checkpoint, CodeSnippet, JobStatus } from "../../lib/api";
 import { useSse } from "../../lib/useSse";
+import { useScrollSpy } from "../../lib/useScrollSpy";
 import MarkdownBlock from "../../components/MarkdownBlock";
 import { finetuneEquations, loraEquations } from "../../lib/equations";
-import { formatDuration, formatTimestamp } from "../../lib/time";
+import { formatDuration, formatTimestamp, formatCheckpointTimestamp } from "../../lib/time";
 
 type MetricsPayload = {
   loss?: number;
@@ -71,7 +76,6 @@ export default function FinetunePage() {
   const [snippets, setSnippets] = useState<CodeSnippet[]>([]);
   const [snippetsLoading, setSnippetsLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
-  const [activeSection, setActiveSection] = useState(finetuneSections[0].id);
   const [error, setError] = useState<string | null>(null);
   const [inspectSample, setInspectSample] = useState(0);
   const [inspectData, setInspectData] = useState<{
@@ -121,22 +125,25 @@ export default function FinetunePage() {
   }, [dataFile]);
 
   const availableCheckpoints = useMemo(
-    () => checkpoints.filter((ckpt) => !ckpt.is_finetuned),
+    () =>
+      checkpoints
+        .filter((ckpt) => !ckpt.is_finetuned)
+        .slice()
+        .sort((a, b) => b.mtime - a.mtime),
     [checkpoints]
   );
+
+  useEffect(() => {
+    if (selectedCheckpoint || availableCheckpoints.length === 0) {
+      return;
+    }
+    setSelectedCheckpoint(availableCheckpoints[0].id);
+  }, [availableCheckpoints, selectedCheckpoint]);
 
   const ssePath = job ? `/api/finetune/jobs/${job.job_id}/events` : undefined;
   const { lastEvent, error: sseError } = useSse(ssePath, Boolean(job));
   const withTimestamp = (message: string) => `[${formatTimestamp()}] ${message}`;
-  const formatCheckpointTimestamp = (date: Date) => {
-    const year = String(date.getFullYear());
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const day = String(date.getDate()).padStart(2, "0");
-    const hours = String(date.getHours()).padStart(2, "0");
-    const minutes = String(date.getMinutes()).padStart(2, "0");
-    const seconds = String(date.getSeconds()).padStart(2, "0");
-    return `${year}${month}${day} ${hours}:${minutes}:${seconds}`;
-  };
+  const { activeSection, setActiveSection } = useScrollSpy(finetuneSections);
 
   useEffect(() => {
     if (!lastEvent) {
@@ -201,26 +208,6 @@ export default function FinetunePage() {
     }
   }, [sseError]);
 
-  useEffect(() => {
-    const elements = finetuneSections
-      .map((section) => document.getElementById(section.id))
-      .filter((element): element is HTMLElement => Boolean(element));
-    if (elements.length === 0) {
-      return;
-    }
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            setActiveSection(entry.target.id);
-          }
-        });
-      },
-      { rootMargin: "-30% 0px -60% 0px" }
-    );
-    elements.forEach((element) => observer.observe(element));
-    return () => observer.disconnect();
-  }, []);
 
   const isRunning = job?.status === "running";
   const isPaused = job?.status === "paused";
@@ -427,7 +414,7 @@ export default function FinetunePage() {
       return;
     }
     inspectThrottleRef.current = now;
-    inspectBatch(0, true);
+    refreshInspect(0, true);
   }, [lastEvent, job]);
 
   useEffect(() => {
@@ -439,22 +426,12 @@ export default function FinetunePage() {
 
   return (
     <div className="page-with-nav">
-      <nav className="side-nav" aria-label="Fine-tuning sections">
-        <div className="side-nav-title">Jump to</div>
-        <div className="side-nav-links">
-          {finetuneSections.map((section) => (
-            <a
-              key={section.id}
-              href={`#${section.id}`}
-              className={activeSection === section.id ? "active" : ""}
-              aria-current={activeSection === section.id ? "location" : undefined}
-              onClick={() => setActiveSection(section.id)}
-            >
-              {section.label}
-            </a>
-          ))}
-        </div>
-      </nav>
+      <SideNav
+        sections={finetuneSections}
+        activeId={activeSection}
+        onNavigate={setActiveSection}
+        ariaLabel="Fine-tuning sections"
+      />
       <div className="page-content">
         <section id="checkpoint" className="section scroll-section">
         <div className="section-title">
@@ -507,7 +484,7 @@ export default function FinetunePage() {
           {method === "lora" && (
             <div className="grid-3" style={{ marginTop: 16 }}>
               <div>
-                <label>LoRA Rank</label>
+                <label>Rank</label>
                 <input
                   type="number"
                   value={loraConfig.lora_rank}
@@ -517,7 +494,7 @@ export default function FinetunePage() {
                 />
               </div>
               <div>
-                <label>LoRA Alpha</label>
+                <label>Alpha</label>
                 <input
                   type="number"
                   value={loraConfig.lora_alpha}
@@ -527,7 +504,7 @@ export default function FinetunePage() {
                 />
               </div>
               <div>
-                <label>LoRA Dropout</label>
+                <label>Dropout</label>
                 <input
                   type="number"
                   step="0.01"
@@ -753,36 +730,17 @@ export default function FinetunePage() {
           <h2>Train</h2>
           <p>Train your model.</p>
         </div>
-        <div className="card">
-          <div className="inline-row" style={{ marginBottom: 12 }}>
-            <button className="primary" onClick={handlePrimaryAction} disabled={isCreating}>
-              {isCreating
-                ? "Initializing..."
-                : !job
-                ? "Start Fine-Tuning"
-                : isRunning
-                ? "Pause"
-                : isPaused
-                ? "Resume"
-                : "Start New"}
-            </button>
-            <button className="secondary" onClick={stepJob} disabled={!job || isRunning}>
-              Step
-            </button>
-          </div>
-          {job && (
-            <>
-              <div className="flex-between" style={{ marginBottom: 8 }}>
-                <span className="badge">{job.status}</span>
-                <span className="badge">{job.iter} / {job.max_iters}</span>
-              </div>
-              <div className="progress">
-                <span style={{ width: `${progress * 100}%` }} />
-              </div>
-            </>
-          )}
-          {error && <p style={{ color: "#b42318" }}>{error}</p>}
-        </div>
+        <TrainingControls
+          job={job}
+          isRunning={isRunning}
+          isPaused={isPaused}
+          isCreating={isCreating}
+          progress={progress}
+          startLabel="Start Fine-Tuning"
+          error={error}
+          onPrimary={handlePrimaryAction}
+          onStep={stepJob}
+        />
       </section>
 
       <section id="metrics" className="section scroll-section">
@@ -822,23 +780,15 @@ export default function FinetunePage() {
           <p>Prompt vs response tokens and attention patterns.</p>
         </div>
         <div className="card">
-          <div className="slider" style={{ marginBottom: 12 }}>
-            <label>Sample</label>
-            <div className="slider-row">
-              <input
-                type="range"
-                min={0}
-                max={maxSampleIndex}
-                step={1}
-                value={inspectSample}
-                onChange={(event) => handleSampleChange(Number(event.target.value))}
-                disabled={!job || isRunning}
-              />
-              <span className="slider-value">
-                {inspectSample} / {maxSampleIndex}
-              </span>
-            </div>
-          </div>
+          <RangeSlider
+            label="Sample"
+            min={0}
+            max={maxSampleIndex}
+            value={inspectSample}
+            onChange={handleSampleChange}
+            disabled={!job || isRunning}
+            style={{ marginBottom: 12 }}
+          />
           {isRunning && <p>Live batch inspection updates while training is running.</p>}
 
           {inspectData ? (
@@ -862,40 +812,22 @@ export default function FinetunePage() {
 
           <div style={{ marginTop: 16 }}>
             <div className="grid-2">
-              <div className="slider">
-                <label>Layer</label>
-                <div className="slider-row">
-                  <input
-                    type="range"
-                    min={0}
-                    max={maxLayerIndex}
-                    step={1}
-                    value={attnLayer}
-                    onChange={(event) => setAttnLayer(Number(event.target.value))}
-                    disabled={!job || isRunning || maxLayerIndex === 0}
-                  />
-                  <span className="slider-value">
-                    {attnLayer} / {maxLayerIndex}
-                  </span>
-                </div>
-              </div>
-              <div className="slider">
-                <label>Head</label>
-                <div className="slider-row">
-                  <input
-                    type="range"
-                    min={0}
-                    max={maxHeadIndex}
-                    step={1}
-                    value={attnHead}
-                    onChange={(event) => setAttnHead(Number(event.target.value))}
-                    disabled={!job || isRunning || maxHeadIndex === 0}
-                  />
-                  <span className="slider-value">
-                    {attnHead} / {maxHeadIndex}
-                  </span>
-                </div>
-              </div>
+              <RangeSlider
+                label="Layer"
+                min={0}
+                max={maxLayerIndex}
+                value={attnLayer}
+                onChange={setAttnLayer}
+                disabled={!job || isRunning || maxLayerIndex === 0}
+              />
+              <RangeSlider
+                label="Head"
+                min={0}
+                max={maxHeadIndex}
+                value={attnHead}
+                onChange={setAttnHead}
+                disabled={!job || isRunning || maxHeadIndex === 0}
+              />
             </div>
             <Heatmap matrix={attention} labels={inspectData?.token_labels || []} />
           </div>
@@ -929,9 +861,7 @@ export default function FinetunePage() {
           <p>Checkpoint events.</p>
         </div>
         <div className="card">
-          <div className="log-box">
-            {logs.length === 0 ? "No logs yet." : logs.join("\n")}
-          </div>
+          <LogBox logs={logs} />
         </div>
       </section>
       </div>

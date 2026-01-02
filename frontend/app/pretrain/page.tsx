@@ -4,12 +4,17 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import CodePanel from "../../components/CodePanel";
 import GraphvizDiagram from "../../components/GraphvizDiagram";
 import Heatmap from "../../components/Heatmap";
+import LogBox from "../../components/LogBox";
 import MarkdownBlock from "../../components/MarkdownBlock";
 import LineChart from "../../components/LineChart";
+import RangeSlider from "../../components/RangeSlider";
+import SideNav from "../../components/SideNav";
 import StatCard from "../../components/StatCard";
 import TokenRainbow from "../../components/TokenRainbow";
+import TrainingControls from "../../components/TrainingControls";
 import { fetchJson, makeFormData, CodeSnippet, JobStatus } from "../../lib/api";
 import { useSse } from "../../lib/useSse";
+import { useScrollSpy } from "../../lib/useScrollSpy";
 import { formatDuration, formatTimestamp } from "../../lib/time";
 import {
   defaultModelConfig,
@@ -85,7 +90,6 @@ export default function PretrainPage() {
   const [snippets, setSnippets] = useState<CodeSnippet[]>([]);
   const [snippetsLoading, setSnippetsLoading] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
-  const [activeSection, setActiveSection] = useState(pretrainSections[0].id);
   const [error, setError] = useState<string | null>(null);
   const [inspectSample, setInspectSample] = useState(0);
   const [inspectData, setInspectData] = useState<{
@@ -104,6 +108,7 @@ export default function PretrainPage() {
   const ssePath = job ? `/api/pretrain/jobs/${job.job_id}/events` : undefined;
   const { lastEvent, error: sseError } = useSse(ssePath, Boolean(job));
   const withTimestamp = (message: string) => `[${formatTimestamp()}] ${message}`;
+  const { activeSection, setActiveSection } = useScrollSpy(pretrainSections);
 
   useEffect(() => {
     if (!lastEvent) {
@@ -168,26 +173,6 @@ export default function PretrainPage() {
     }
   }, [sseError]);
 
-  useEffect(() => {
-    const elements = pretrainSections
-      .map((section) => document.getElementById(section.id))
-      .filter((element): element is HTMLElement => Boolean(element));
-    if (elements.length === 0) {
-      return;
-    }
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            setActiveSection(entry.target.id);
-          }
-        });
-      },
-      { rootMargin: "-30% 0px -60% 0px" }
-    );
-    elements.forEach((element) => observer.observe(element));
-    return () => observer.disconnect();
-  }, []);
 
   const estimatedParams = useMemo(
     () => estimateParams({ ...modelConfig, use_einops: useEinops }),
@@ -438,22 +423,12 @@ export default function PretrainPage() {
 
   return (
     <div className="page-with-nav">
-      <nav className="side-nav" aria-label="Pretraining sections">
-        <div className="side-nav-title">Jump to</div>
-        <div className="side-nav-links">
-          {pretrainSections.map((section) => (
-            <a
-              key={section.id}
-              href={`#${section.id}`}
-              className={activeSection === section.id ? "active" : ""}
-              aria-current={activeSection === section.id ? "location" : undefined}
-              onClick={() => setActiveSection(section.id)}
-            >
-              {section.label}
-            </a>
-          ))}
-        </div>
-      </nav>
+      <SideNav
+        sections={pretrainSections}
+        activeId={activeSection}
+        onNavigate={setActiveSection}
+        ariaLabel="Pretraining sections"
+      />
       <div className="page-content">
       <section id="training-data" className="section scroll-section">
         <div className="section-title">
@@ -1014,7 +989,7 @@ export default function PretrainPage() {
             </div>
           </details>
           <details className="expander">
-            <summary>Code Snippets</summary>
+            <summary>Code</summary>
             <div className="expander-content">
               {snippetsLoading ? (
                 <p>Loading code snippets...</p>
@@ -1033,40 +1008,17 @@ export default function PretrainPage() {
           <h2>Train</h2>
           <p>Train your model.</p>
         </div>
-        <div className="card">
-          <div className="inline-row" style={{ marginBottom: 12 }}>
-            <button className="primary" onClick={handlePrimaryAction} disabled={isCreating}>
-              {isCreating
-                ? "Initializing..."
-                : !job
-                ? "Start Training"
-                : isRunning
-                ? "Pause"
-                : isPaused
-                ? "Resume"
-                : "Start New"}
-            </button>
-            <button className="secondary" onClick={stepJob} disabled={!job || isRunning}>
-              Step
-            </button>
-          </div>
-
-          {job && (
-            <>
-              <div className="flex-between" style={{ marginBottom: 8 }}>
-                <span className="badge">{job.status}</span>
-                <span className="badge">
-                  {job.iter} / {job.max_iters}
-                </span>
-              </div>
-              <div className="progress">
-                <span style={{ width: `${progress * 100}%` }} />
-              </div>
-            </>
-          )}
-
-          {error && <p style={{ color: "#b42318" }}>{error}</p>}
-        </div>
+        <TrainingControls
+          job={job}
+          isRunning={isRunning}
+          isPaused={isPaused}
+          isCreating={isCreating}
+          progress={progress}
+          startLabel="Start Training"
+          error={error}
+          onPrimary={handlePrimaryAction}
+          onStep={stepJob}
+        />
       </section>
 
       <section id="live-metrics" className="section scroll-section">
@@ -1110,23 +1062,15 @@ export default function PretrainPage() {
           <p>Peek at tokens, next-token predictions, and attention.</p>
         </div>
         <div className="card">
-          <div className="slider" style={{ marginBottom: 12 }}>
-            <label>Sample</label>
-            <div className="slider-row">
-              <input
-                type="range"
-                min={0}
-                max={maxSampleIndex}
-                step={1}
-                value={inspectSample}
-                onChange={(event) => handleSampleChange(Number(event.target.value))}
-                disabled={!job || isRunning}
-              />
-              <span className="slider-value">
-                {inspectSample} / {maxSampleIndex}
-              </span>
-            </div>
-          </div>
+          <RangeSlider
+            label="Sample"
+            min={0}
+            max={maxSampleIndex}
+            value={inspectSample}
+            onChange={handleSampleChange}
+            disabled={!job || isRunning}
+            style={{ marginBottom: 12 }}
+          />
           {isRunning && <p>Live batch inspection updates while training is running.</p>}
 
           {inspectData ? (
@@ -1167,40 +1111,22 @@ export default function PretrainPage() {
 
           <div style={{ marginTop: 16 }}>
             <div className="grid-2">
-              <div className="slider">
-                <label>Layer</label>
-                <div className="slider-row">
-                  <input
-                    type="range"
-                    min={0}
-                    max={maxLayerIndex}
-                    step={1}
-                    value={attnLayer}
-                    onChange={(event) => setAttnLayer(Number(event.target.value))}
-                    disabled={!job || isRunning}
-                  />
-                  <span className="slider-value">
-                    {attnLayer} / {maxLayerIndex}
-                  </span>
-                </div>
-              </div>
-              <div className="slider">
-                <label>Head</label>
-                <div className="slider-row">
-                  <input
-                    type="range"
-                    min={0}
-                    max={maxHeadIndex}
-                    step={1}
-                    value={attnHead}
-                    onChange={(event) => setAttnHead(Number(event.target.value))}
-                    disabled={!job || isRunning}
-                  />
-                  <span className="slider-value">
-                    {attnHead} / {maxHeadIndex}
-                  </span>
-                </div>
-              </div>
+              <RangeSlider
+                label="Layer"
+                min={0}
+                max={maxLayerIndex}
+                value={attnLayer}
+                onChange={setAttnLayer}
+                disabled={!job || isRunning}
+              />
+              <RangeSlider
+                label="Head"
+                min={0}
+                max={maxHeadIndex}
+                value={attnHead}
+                onChange={setAttnHead}
+                disabled={!job || isRunning}
+              />
             </div>
 
               <Heatmap matrix={attention} labels={inspectData?.token_labels || []} />
@@ -1236,9 +1162,7 @@ export default function PretrainPage() {
           {/* <p>Checkpoint and status events.</p> */}
         </div>
         <div className="card">
-          <div className="log-box">
-            {logs.length === 0 ? "No logs yet." : logs.join("\n")}
-          </div>
+          <LogBox logs={logs} />
         </div>
       </section>
       </div>

@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import CodePanel from "../../components/CodePanel";
 import Heatmap from "../../components/Heatmap";
 import LineChart from "../../components/LineChart";
+import RangeSlider from "../../components/RangeSlider";
 import StatCard from "../../components/StatCard";
 import { Checkpoint, CodeSnippet, fetchJson } from "../../lib/api";
+import { formatCheckpointTimestamp } from "../../lib/time";
 import MarkdownBlock from "../../components/MarkdownBlock";
 import { inferenceEquations } from "../../lib/equations";
 
@@ -40,7 +42,9 @@ export default function InferencePage() {
   const [selectedHead, setSelectedHead] = useState(0);
   const [selectedPosition, setSelectedPosition] = useState(0);
   const [snippets, setSnippets] = useState<CodeSnippet[]>([]);
+  const [snippetsLoading, setSnippetsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isDiagnosticsLoading, setIsDiagnosticsLoading] = useState(false);
 
   const generatedCount = Math.max(0, generatedText.length - prompt.length);
 
@@ -49,6 +53,18 @@ export default function InferencePage() {
       .then((data) => setCheckpoints(data.checkpoints))
       .catch((err) => setError((err as Error).message));
   }, []);
+
+  const sortedCheckpoints = useMemo(
+    () => [...checkpoints].sort((a, b) => b.mtime - a.mtime),
+    [checkpoints]
+  );
+
+  useEffect(() => {
+    if (selectedCheckpoint || sortedCheckpoints.length === 0) {
+      return;
+    }
+    setSelectedCheckpoint(sortedCheckpoints[0].id);
+  }, [sortedCheckpoints, selectedCheckpoint]);
 
   const loadSession = async () => {
     setError(null);
@@ -96,9 +112,10 @@ export default function InferencePage() {
     }
   };
 
-  const runDiagnostics = async () => {
+  const runDiagnostics = useCallback(async () => {
     if (!session) return;
     setError(null);
+    setIsDiagnosticsLoading(true);
     try {
       const data = await fetchJson<DiagnosticsMeta>(
         `/api/inference/sessions/${session.session_id}/diagnostics`,
@@ -114,8 +131,10 @@ export default function InferencePage() {
       setSelectedPosition(Math.max(0, data.token_ids.length - 2));
     } catch (err) {
       setError((err as Error).message);
+    } finally {
+      setIsDiagnosticsLoading(false);
     }
-  };
+  }, [prompt, session]);
 
   useEffect(() => {
     if (!diagnostics) return;
@@ -159,6 +178,32 @@ export default function InferencePage() {
   const maxLayerIndex = Math.max(0, layersCount - 1);
   const maxHeadIndex = Math.max(0, headsCount - 1);
 
+  useEffect(() => {
+    if (!session) {
+      return;
+    }
+    const timeout = setTimeout(() => {
+      runDiagnostics();
+    }, 400);
+    return () => clearTimeout(timeout);
+  }, [prompt, runDiagnostics, session]);
+
+  useEffect(() => {
+    let active = true;
+    setSnippetsLoading(true);
+    const timeout = setTimeout(() => {
+      loadSnippets().finally(() => {
+        if (active) {
+          setSnippetsLoading(false);
+        }
+      });
+    }, 400);
+    return () => {
+      active = false;
+      clearTimeout(timeout);
+    };
+  }, []);
+
   return (
     <>
       <section className="section">
@@ -170,9 +215,9 @@ export default function InferencePage() {
           <div className="inline-row" style={{ alignItems: "center" }}>
             <select value={selectedCheckpoint} onChange={(event) => setSelectedCheckpoint(event.target.value)}>
               <option value="">Select checkpoint</option>
-              {checkpoints.map((ckpt) => (
+              {sortedCheckpoints.map((ckpt) => (
                 <option key={ckpt.id} value={ckpt.id}>
-                  {ckpt.name}
+                  {formatCheckpointTimestamp(new Date(ckpt.mtime * 1000))} · {ckpt.name}
                 </option>
               ))}
             </select>
@@ -248,8 +293,6 @@ export default function InferencePage() {
           </div>
           <div className="inline-row" style={{ marginTop: 12 }}>
             <button className="primary" onClick={generate} disabled={!session}>Generate</button>
-            <button className="secondary" onClick={runDiagnostics} disabled={!session}>Run Diagnostics</button>
-            <button className="secondary" onClick={loadSnippets}>Load Code Snippets</button>
           </div>
           {error && <p style={{ color: "#b42318" }}>{error}</p>}
         </div>
@@ -257,7 +300,7 @@ export default function InferencePage() {
 
       <section className="section">
         <div className="section-title">
-          <h2>Understand Text Generation</h2>
+          <h2>Understand</h2>
           <p>Sampling equations and references.</p>
         </div>
         <div className="card">
@@ -265,6 +308,18 @@ export default function InferencePage() {
             <summary>Equations</summary>
             <div className="expander-content">
               <MarkdownBlock content={inferenceEquations} />
+            </div>
+          </details>
+          <details className="expander">
+            <summary>Code Snippets</summary>
+            <div className="expander-content">
+              {snippetsLoading ? (
+                <p>Loading code snippets...</p>
+              ) : snippets.length === 0 ? (
+                <p>No snippets available yet.</p>
+              ) : (
+                snippets.map((snippet) => <CodePanel key={snippet.title} snippet={snippet} />)
+              )}
             </div>
           </details>
         </div>
@@ -294,40 +349,22 @@ export default function InferencePage() {
           {diagnostics ? (
             <>
               <div className="grid-3">
-                <div className="slider">
-                  <label>Layer</label>
-                  <div className="slider-row">
-                    <input
-                      type="range"
-                      min={0}
-                      max={maxLayerIndex}
-                      step={1}
-                      value={selectedLayer}
-                      onChange={(event) => setSelectedLayer(Number(event.target.value))}
-                      disabled={maxLayerIndex === 0}
-                    />
-                    <span className="slider-value">
-                      {selectedLayer} / {maxLayerIndex}
-                    </span>
-                  </div>
-                </div>
-                <div className="slider">
-                  <label>Head</label>
-                  <div className="slider-row">
-                    <input
-                      type="range"
-                      min={0}
-                      max={maxHeadIndex}
-                      step={1}
-                      value={selectedHead}
-                      onChange={(event) => setSelectedHead(Number(event.target.value))}
-                      disabled={maxHeadIndex === 0}
-                    />
-                    <span className="slider-value">
-                      {selectedHead} / {maxHeadIndex}
-                    </span>
-                  </div>
-                </div>
+                <RangeSlider
+                  label="Layer"
+                  min={0}
+                  max={maxLayerIndex}
+                  value={selectedLayer}
+                  onChange={setSelectedLayer}
+                  disabled={maxLayerIndex === 0}
+                />
+                <RangeSlider
+                  label="Head"
+                  min={0}
+                  max={maxHeadIndex}
+                  value={selectedHead}
+                  onChange={setSelectedHead}
+                  disabled={maxHeadIndex === 0}
+                />
                 <div>
                   <label>Logit Lens Position</label>
                   <input
@@ -342,11 +379,7 @@ export default function InferencePage() {
 
               <div style={{ marginTop: 16 }}>
                 <h3>Attention Heatmap</h3>
-                {attentionMatrix.length > 0 ? (
-                  <Heatmap matrix={attentionMatrix} labels={diagnostics.token_labels} />
-                ) : (
-                  <p>Loading attention map...</p>
-                )}
+                <Heatmap matrix={attentionMatrix} labels={diagnostics.token_labels} />
               </div>
 
               <div style={{ marginTop: 24 }}>
@@ -391,27 +424,14 @@ export default function InferencePage() {
               </div>
             </>
           ) : (
-            <p>Run diagnostics to inspect attention, logit lens, and layer norms.</p>
+            <p>
+              {session
+                ? isDiagnosticsLoading
+                  ? "Running diagnostics..."
+                  : "Diagnostics update automatically when you change the prompt."
+                : "Load a checkpoint to view diagnostics."}
+            </p>
           )}
-        </div>
-      </section>
-
-      <section className="section">
-        <div className="section-title">
-          <h2>Code Snippets</h2>
-          <p>Sampling and inference code.</p>
-        </div>
-        <div>
-          <details className="expander">
-            <summary>Code Snippets</summary>
-            <div className="expander-content">
-              {snippets.length === 0 ? (
-                <div className="card">Load code snippets to inspect inference modules.</div>
-              ) : (
-                snippets.map((snippet) => <CodePanel key={snippet.title} snippet={snippet} />)
-              )}
-            </div>
-          </details>
         </div>
       </section>
     </>
