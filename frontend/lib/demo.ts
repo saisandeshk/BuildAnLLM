@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-const DEMO_HOSTS = new Set(["demo.buildanllm.com"]);
+const DEMO_HOSTS = new Set(["buildanllm.com", "www.buildanllm.com"]);
 
 export function resolveDemoMode(hostname?: string): boolean {
   if (process.env.NEXT_PUBLIC_DEMO_MODE === "true") {
