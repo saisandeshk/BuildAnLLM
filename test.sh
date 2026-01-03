@@ -2,6 +2,8 @@
 
 clear
 
+set -euo pipefail
+
 # Playwright install (idempotent, checks for updates)
 (cd frontend && npx playwright install)
 

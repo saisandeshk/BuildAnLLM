@@ -28,7 +28,7 @@ describe("DemoBanner", () => {
     render(<DemoBanner />);
 
     expect(screen.getByText("Demo mode")).toBeInTheDocument();
-    const link = screen.getByRole("link", { name: /clone the repo/i });
+    const link = screen.getByRole("link", { name: /public demo/i });
     expect(link).toHaveAttribute("href", "https://github.com/jammastergirish/buildanllm");
   });
 });
