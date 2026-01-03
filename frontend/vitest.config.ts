@@ -1,6 +1,16 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig, configDefaults } from "vitest/config";
 
+const plausibleTrackerStub = fileURLToPath(
+  new URL("./test/stubs/plausible-tracker.ts", import.meta.url)
+);
+
 export default defineConfig({
+  resolve: {
+    alias: {
+      "@plausible-analytics/tracker": plausibleTrackerStub,
+    },
+  },
   esbuild: {
     jsx: "automatic",
   },

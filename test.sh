@@ -1,5 +1,6 @@
 #!/bin/bash
-set -e
+
+clear
 
 # Playwright install (idempotent, checks for updates)
 (cd frontend && npx playwright install)

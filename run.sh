@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+clear
+
 # Function to handle script termination
 cleanup() {
     echo "Stopping backend..."
@@ -19,6 +21,7 @@ if ! command -v npm &> /dev/null; then
     exit 1
 fi
 
+# Idempotent
 echo "Installing/Updating uv..."
 pip install uv
 
