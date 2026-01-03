@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import DemoBanner from "../components/DemoBanner";
 import Nav from "../components/Nav";
+import PlausibleAnalytics from "../components/PlausibleAnalytics";
 
 const plexSans = IBM_Plex_Sans({
   subsets: ["latin"],
@@ -28,6 +29,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={`${plexSans.variable} ${plexMono.variable}`}>
       <body>
+        <PlausibleAnalytics />
         <header className="site-header">
           <div className="brand">
             Build an LLM
