@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect } from "react";
-import { init } from "@plausible-analytics/tracker";
 import { useDemoMode } from "../lib/demo";
 
 let initialized = false;
@@ -16,8 +15,21 @@ export default function PlausibleAnalytics() {
     if (initialized) {
       return;
     }
-    init({ domain: "buildanllm.com" });
-    initialized = true;
+    let active = true;
+    import("@plausible-analytics/tracker")
+      .then(({ init }) => {
+        if (!active || initialized) {
+          return;
+        }
+        init({ domain: "buildanllm.com" });
+        initialized = true;
+      })
+      .catch(() => {
+        // Swallow analytics load failures to keep render clean.
+      });
+    return () => {
+      active = false;
+    };
   }, [isDemo]);
 
   return null;
