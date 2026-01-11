@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -23,6 +23,7 @@ class PretrainJobPayload(BaseModel):
     tokenizer_type: str = "bpe-tiktoken"
     use_einops: bool = True
     training: PretrainTrainingParams = Field(default_factory=PretrainTrainingParams)
+    training_text_paths: Optional[List[str]] = None
     auto_start: bool = True
 
     model_config = ConfigDict(populate_by_name=True)

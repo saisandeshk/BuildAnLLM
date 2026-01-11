@@ -33,9 +33,29 @@ def _parse_payload(payload: str) -> PretrainJobPayload:
         return PretrainJobPayload.parse_raw(payload)
 
 
-def _read_training_text(upload: Optional[UploadFile]) -> str:
+def _read_training_text(
+    upload: Optional[UploadFile],
+    training_text_paths: Optional[list[str]] = None,
+) -> str:
+    """Read training text from upload, specified paths, or default to Orwell."""
+    texts: list[str] = []
+
+    # Add uploaded file content if provided
     if upload is not None:
-        return upload.file.read().decode("utf-8")
+        texts.append(upload.file.read().decode("utf-8"))
+
+    # Add content from selected data source paths
+    if training_text_paths:
+        for path_str in training_text_paths:
+            path = Path(path_str)
+            if path.exists():
+                texts.append(path.read_text(encoding="utf-8"))
+
+    # If we have any text, return it combined
+    if texts:
+        return "\n\n".join(texts)
+
+    # Fall back to default Orwell text
     training_path = Path("input_data/pretraining/orwell.txt")
     if not training_path.exists():
         raise HTTPException(status_code=400, detail="Default pretraining text not found")
@@ -48,7 +68,7 @@ async def create_job(
     training_file: Optional[UploadFile] = File(default=None),
 ) -> JobStatusResponse:
     parsed = _parse_payload(payload)
-    text = _read_training_text(training_file)
+    text = _read_training_text(training_file, parsed.training_text_paths)
 
     cfg = build_model_config(parsed.model_config_data)
     try:
@@ -230,6 +250,21 @@ PRETRAINING_DATA_SOURCES = {
     "Oscar Wilde": {
         "filename": "input_data/pretraining/wilde.txt",
         "language": "English",
+        "script": "Latin",
+    },
+    "Muhammad al-Khwarizmi": {
+        "filename": "input_data/pretraining/aljbr.txt",
+        "language": "Arabic",
+        "script": "Arabic",
+    },
+    "Marcel Proust": {
+        "filename": "input_data/pretraining/proust.txt",
+        "language": "French",
+        "script": "Latin",
+    },
+    "Miguel de Cervantes": {
+        "filename": "input_data/pretraining/donquixote.txt",
+        "language": "Spanish",
         "script": "Latin",
     },
 }
