@@ -237,6 +237,11 @@ PRETRAINING_DATA_SOURCES = {
         "language": "English",
         "script": "Latin",
     },
+    "Aryabhata's Aryabhatiyam": {
+        "filename": "input_data/pretraining/aryabhata.txt",
+        "language": "Sanskrit",
+        "script": "Devanagari",
+    },
     "Homer's Iliad": {
         "filename": "input_data/pretraining/iliad.txt",
         "language": "Greek",
@@ -246,11 +251,6 @@ PRETRAINING_DATA_SOURCES = {
         "filename": "input_data/pretraining/principia.txt",
         "language": "Latin",
         "script": "Latin",
-    },
-    "Vyasa's Bhagavad Gita": {
-        "filename": "input_data/pretraining/gita.txt",
-        "language": "Sanskrit",
-        "script": "Devanagari",
     },
     "George Orwell Collection": {
         "filename": "input_data/pretraining/orwell.txt",

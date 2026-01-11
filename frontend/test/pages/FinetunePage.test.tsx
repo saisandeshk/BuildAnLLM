@@ -88,7 +88,9 @@ describe("FinetunePage", () => {
     });
 
     expect(fetchJsonMock).toHaveBeenCalledWith("/api/checkpoints");
-    expect(fetchJsonMock.mock.calls.some(([path]) => String(path).startsWith("/api/checkpoints/"))).toBe(true);
+    await waitFor(() => {
+      expect(fetchJsonMock.mock.calls.some(([path]) => String(path).startsWith("/api/checkpoints/"))).toBe(true);
+    });
   });
 
   it("shows lora controls when selected", async () => {
