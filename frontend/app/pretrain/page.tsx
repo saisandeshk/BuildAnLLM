@@ -50,6 +50,14 @@ const pretrainSections = [
   { id: "logs", label: "Logs" },
 ];
 
+// Type for pretraining data source from API
+type DataSource = {
+  name: string;
+  filename: string;
+  words: number;
+  chars: number;
+};
+
 type MetricsPayload = {
   loss?: number;
   running_loss?: number;
@@ -73,6 +81,10 @@ export default function PretrainPage() {
   const [useEinops, setUseEinops] = useState(true);
   const [tokenizerType, setTokenizerType] = useState("bpe-tiktoken");
   const [trainingFile, setTrainingFile] = useState<File | null>(null);
+  const [uploadedFileStats, setUploadedFileStats] = useState<{ words: number; chars: number } | null>(null);
+  const [includeUploadedFile, setIncludeUploadedFile] = useState(false);
+  const [dataSources, setDataSources] = useState<DataSource[]>([]);
+  const [selectedDataSources, setSelectedDataSources] = useState<Set<string>>(new Set());
   const [autoStart, setAutoStart] = useState(true);
   const [trainingParams, setTrainingParams] = useState({
     batch_size: 32,
@@ -105,6 +117,7 @@ export default function PretrainPage() {
   const [attnLayer, setAttnLayer] = useState(0);
   const [attnHead, setAttnHead] = useState(0);
   const inspectThrottleRef = useRef(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const inspectMaxTokens = 128;
 
   const ssePath = job ? `/api/pretrain/jobs/${job.job_id}/events` : undefined;
@@ -200,6 +213,54 @@ export default function PretrainPage() {
   const maxLayerIndex = Math.max(0, modelConfig.n_layers - 1);
   const maxHeadIndex = Math.max(0, modelConfig.n_heads - 1);
 
+  // Compute total stats for selected data sources
+  const totalDataStats = useMemo(() => {
+    let words = 0;
+    let chars = 0;
+    for (const name of selectedDataSources) {
+      const source = dataSources.find((s) => s.name === name);
+      if (source) {
+        words += source.words;
+        chars += source.chars;
+      }
+    }
+    if (includeUploadedFile && uploadedFileStats) {
+      words += uploadedFileStats.words;
+      chars += uploadedFileStats.chars;
+    }
+    return { words, chars };
+  }, [selectedDataSources, dataSources, includeUploadedFile, uploadedFileStats]);
+
+  // Read uploaded file stats
+  useEffect(() => {
+    if (!trainingFile) {
+      setUploadedFileStats(null);
+      setIncludeUploadedFile(false);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = String(reader.result || "");
+      const chars = text.length;
+      const words = text.split(/\s+/).filter((w) => w.length > 0).length;
+      setUploadedFileStats({ words, chars });
+    };
+    reader.readAsText(trainingFile);
+  }, [trainingFile]);
+
+  // Fetch pretraining data sources from API on mount
+  useEffect(() => {
+    fetchJson<{ sources: DataSource[] }>("/api/pretrain/data-sources")
+      .then((data) => {
+        setDataSources(data.sources);
+        // Default to first source if available
+        if (data.sources.length > 0) {
+          setSelectedDataSources(new Set([data.sources[0].name]));
+        }
+      })
+      .catch((err) => setError((err as Error).message));
+  }, []);
+
   const markConfigManual = () => {
     setActivePreset(null);
     setModelSize(null);
@@ -256,14 +317,30 @@ export default function PretrainPage() {
     setError(null);
     setIsCreating(true);
     try {
+      // Collect all selected training text paths from dataSources
+      const trainingTextPaths = Array.from(selectedDataSources)
+        .map((name) => dataSources.find((s) => s.name === name)?.filename)
+        .filter((f): f is string => Boolean(f));
+
+      // Default to orwell if nothing selected and no file uploaded
+      if (trainingTextPaths.length === 0 && !includeUploadedFile) {
+        const orwell = dataSources.find((s) => s.name === "George Orwell");
+        if (orwell) {
+          trainingTextPaths.push(orwell.filename);
+        }
+      }
+
       const payload = {
         model_config: { ...modelConfig, use_einops: useEinops },
         tokenizer_type: tokenizerType,
         use_einops: useEinops,
         training: trainingParams,
+        training_text_paths: trainingTextPaths.length > 0 ? trainingTextPaths : undefined,
         auto_start: autoStart,
       };
-      const form = makeFormData(payload, trainingFile || undefined, "training_file");
+      // Only include uploaded file if the checkbox is checked
+      const fileToUpload = includeUploadedFile && trainingFile ? trainingFile : undefined;
+      const form = makeFormData(payload, fileToUpload, "training_file");
       const data = await fetchJson<JobStatus>("/api/pretrain/jobs", {
         method: "POST",
         body: form,
@@ -432,14 +509,109 @@ export default function PretrainPage() {
       <section id="training-data" className="section scroll-section">
         <div className="section-title">
           <h2>Training Data</h2>
-          <p>Provide a text file or use a default set of George Orwell's books.</p>
+          <p>Select text corpora to concatenate for training.</p>
         </div>
         <div className="card">
-          <input
-            type="file"
-            accept=".txt"
-            onChange={(event) => setTrainingFile(event.target.files?.[0] || null)}
-          />
+          <div style={{ marginBottom: 16 }}>
+            <span className="row-label-title" style={{ display: "block", marginBottom: 8 }}>Upload Custom File</span>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".txt"
+              onChange={(event) => {
+                const file = event.target.files?.[0] || null;
+                setTrainingFile(file);
+                if (file) {
+                  setIncludeUploadedFile(true);
+                }
+              }}
+            />
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <span className="row-label-title" style={{ display: "block", marginBottom: 12 }}>Select Sources</span>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {trainingFile && (
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <label className="checkbox" style={{ flex: 1 }}>
+                    <input
+                      type="checkbox"
+                      checked={includeUploadedFile}
+                      onChange={(event) => setIncludeUploadedFile(event.target.checked)}
+                    />
+                    <span className="checkbox-box" aria-hidden="true" />
+                    <span className="checkbox-text">
+                      {trainingFile.name}
+                      {uploadedFileStats && (
+                        <span style={{ opacity: 0.6, marginLeft: 8 }}>
+                          ({uploadedFileStats.words.toLocaleString()} words)
+                        </span>
+                      )}
+                    </span>
+                  </label>
+                  <button
+                    type="button"
+                    className="secondary"
+                    style={{ padding: "4px 8px", fontSize: "0.875rem" }}
+                    onClick={() => {
+                      setTrainingFile(null);
+                      if (fileInputRef.current) {
+                        fileInputRef.current.value = "";
+                      }
+                    }}
+                    title="Remove uploaded file"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+              {dataSources.map((source) => (
+                <label key={source.name} className="checkbox">
+                  <input
+                    type="checkbox"
+                    checked={selectedDataSources.has(source.name)}
+                    onChange={(event) => {
+                      setSelectedDataSources((prev) => {
+                        const next = new Set(prev);
+                        if (event.target.checked) {
+                          next.add(source.name);
+                        } else {
+                          next.delete(source.name);
+                        }
+                        return next;
+                      });
+                    }}
+                  />
+                  <span className="checkbox-box" aria-hidden="true" />
+                  <span className="checkbox-text">
+                    {source.name}
+                    <span style={{ opacity: 0.6, marginLeft: 8 }}>
+                      ({source.words.toLocaleString()} words)
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {(totalDataStats.words > 0 || totalDataStats.chars > 0) && (
+            <div style={{ paddingTop: 16, borderTop: "1px solid var(--border-subtle)" }}>
+              <div style={{ display: "flex", gap: 24 }}>
+                <div>
+                  <span style={{ opacity: 0.6 }}>Total Words</span>
+                  <div style={{ fontSize: "1.25rem", fontWeight: 600 }}>
+                    {totalDataStats.words.toLocaleString()}
+                  </div>
+                </div>
+                <div>
+                  <span style={{ opacity: 0.6 }}>Total Characters</span>
+                  <div style={{ fontSize: "1.25rem", fontWeight: 600 }}>
+                    {totalDataStats.chars.toLocaleString()}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </section>
 
@@ -1012,8 +1184,14 @@ export default function PretrainPage() {
           isRunning={isRunning}
           isPaused={isPaused}
           isCreating={isCreating}
-          disabled={isDemo}
-          disabledReason={isDemo ? "Demo mode: pre-training disabled." : undefined}
+          disabled={isDemo || (!selectedDataSources.size && !includeUploadedFile)}
+          disabledReason={
+            isDemo
+              ? "Demo mode: pre-training disabled."
+              : !selectedDataSources.size && !includeUploadedFile
+              ? "Select at least one data source in Training Data above."
+              : undefined
+          }
           progress={progress}
           startLabel="Start Training"
           error={error}

@@ -208,3 +208,31 @@ async def stream_events(job_id: str) -> StreamingResponse:
 def _format_sse(event: str, data: dict) -> str:
     payload = json.dumps(data)
     return f"event: {event}\ndata: {payload}\n\n"
+
+
+# Define available pretraining data sources
+PRETRAINING_DATA_SOURCES = {
+    "Charles Dickens": "input_data/pretraining/dickens.txt",
+    "George Orwell": "input_data/pretraining/orwell.txt",
+    "William Shakespeare": "input_data/pretraining/shakespeare.txt",
+    "Oscar Wilde": "input_data/pretraining/wilde.txt",
+}
+
+
+@router.get("/data-sources")
+async def get_data_sources() -> dict:
+    """Return available pretraining data sources with their stats."""
+    sources = []
+    for name, filepath in PRETRAINING_DATA_SOURCES.items():
+        path = Path(filepath)
+        if path.exists():
+            content = path.read_text(encoding="utf-8")
+            words = len(content.split())
+            chars = len(content)
+            sources.append({
+                "name": name,
+                "filename": filepath,
+                "words": words,
+                "chars": chars,
+            })
+    return {"sources": sources}
