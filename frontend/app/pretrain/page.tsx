@@ -54,6 +54,8 @@ const pretrainSections = [
 type DataSource = {
   name: string;
   filename: string;
+  language: string;
+  script: string;
   words: number;
   chars: number;
 };
@@ -530,68 +532,92 @@ export default function PretrainPage() {
 
           <div style={{ marginBottom: 16 }}>
             <span className="row-label-title" style={{ display: "block", marginBottom: 12 }}>Select Sources</span>
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {trainingFile && (
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <label className="checkbox" style={{ flex: 1 }}>
-                    <input
-                      type="checkbox"
-                      checked={includeUploadedFile}
-                      onChange={(event) => setIncludeUploadedFile(event.target.checked)}
-                    />
-                    <span className="checkbox-box" aria-hidden="true" />
-                    <span className="checkbox-text">
-                      {trainingFile.name}
-                      {uploadedFileStats && (
-                        <span style={{ opacity: 0.6, marginLeft: 8 }}>
-                          ({uploadedFileStats.words.toLocaleString()} words)
+            <table className="data-table" style={{ width: "100%", tableLayout: "fixed" }}>
+              <thead>
+                <tr>
+                  <th style={{ width: 40 }}></th>
+                  <th style={{ width: "30%" }}>Author</th>
+                  <th style={{ width: "15%" }}>Language</th>
+                  <th style={{ width: "15%" }}>Script</th>
+                  <th style={{ width: "15%", textAlign: "right" }}>Words</th>
+                  <th style={{ width: "15%", textAlign: "right" }}>Characters</th>
+                </tr>
+              </thead>
+              <tbody>
+                {trainingFile && (
+                  <tr>
+                    <td>
+                      <label className="checkbox">
+                        <input
+                          type="checkbox"
+                          checked={includeUploadedFile}
+                          onChange={(event) => setIncludeUploadedFile(event.target.checked)}
+                        />
+                        <span className="checkbox-box" aria-hidden="true" />
+                      </label>
+                    </td>
+                    <td>
+                      <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {trainingFile.name}
                         </span>
-                      )}
-                    </span>
-                  </label>
-                  <button
-                    type="button"
-                    className="secondary"
-                    style={{ padding: "4px 8px", fontSize: "0.875rem" }}
-                    onClick={() => {
-                      setTrainingFile(null);
-                      if (fileInputRef.current) {
-                        fileInputRef.current.value = "";
-                      }
-                    }}
-                    title="Remove uploaded file"
-                  >
-                    ×
-                  </button>
-                </div>
-              )}
-              {dataSources.map((source) => (
-                <label key={source.name} className="checkbox">
-                  <input
-                    type="checkbox"
-                    checked={selectedDataSources.has(source.name)}
-                    onChange={(event) => {
-                      setSelectedDataSources((prev) => {
-                        const next = new Set(prev);
-                        if (event.target.checked) {
-                          next.add(source.name);
-                        } else {
-                          next.delete(source.name);
-                        }
-                        return next;
-                      });
-                    }}
-                  />
-                  <span className="checkbox-box" aria-hidden="true" />
-                  <span className="checkbox-text">
-                    {source.name}
-                    <span style={{ opacity: 0.6, marginLeft: 8 }}>
-                      ({source.words.toLocaleString()} words)
-                    </span>
-                  </span>
-                </label>
-              ))}
-            </div>
+                        <button
+                          type="button"
+                          className="secondary"
+                          style={{ padding: "2px 6px", fontSize: "0.75rem", flexShrink: 0 }}
+                          onClick={() => {
+                            setTrainingFile(null);
+                            if (fileInputRef.current) {
+                              fileInputRef.current.value = "";
+                            }
+                          }}
+                          title="Remove"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    </td>
+                    <td style={{ opacity: 0.6 }}>—</td>
+                    <td style={{ opacity: 0.6 }}>—</td>
+                    <td style={{ textAlign: "right" }}>
+                      {uploadedFileStats?.words.toLocaleString() ?? "—"}
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      {uploadedFileStats?.chars.toLocaleString() ?? "—"}
+                    </td>
+                  </tr>
+                )}
+                {dataSources.map((source) => (
+                  <tr key={source.name}>
+                    <td>
+                      <label className="checkbox">
+                        <input
+                          type="checkbox"
+                          checked={selectedDataSources.has(source.name)}
+                          onChange={(event) => {
+                            setSelectedDataSources((prev) => {
+                              const next = new Set(prev);
+                              if (event.target.checked) {
+                                next.add(source.name);
+                              } else {
+                                next.delete(source.name);
+                              }
+                              return next;
+                            });
+                          }}
+                        />
+                        <span className="checkbox-box" aria-hidden="true" />
+                      </label>
+                    </td>
+                    <td>{source.name}</td>
+                    <td>{source.language}</td>
+                    <td>{source.script}</td>
+                    <td style={{ textAlign: "right" }}>{source.words.toLocaleString()}</td>
+                    <td style={{ textAlign: "right" }}>{source.chars.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
 
           {(totalDataStats.words > 0 || totalDataStats.chars > 0) && (

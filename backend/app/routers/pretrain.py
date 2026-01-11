@@ -210,12 +210,28 @@ def _format_sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {payload}\n\n"
 
 
-# Define available pretraining data sources
+# Define available pretraining data sources with metadata
 PRETRAINING_DATA_SOURCES = {
-    "Charles Dickens": "input_data/pretraining/dickens.txt",
-    "George Orwell": "input_data/pretraining/orwell.txt",
-    "William Shakespeare": "input_data/pretraining/shakespeare.txt",
-    "Oscar Wilde": "input_data/pretraining/wilde.txt",
+    "Charles Dickens": {
+        "filename": "input_data/pretraining/dickens.txt",
+        "language": "English",
+        "script": "Latin",
+    },
+    "George Orwell": {
+        "filename": "input_data/pretraining/orwell.txt",
+        "language": "English",
+        "script": "Latin",
+    },
+    "William Shakespeare": {
+        "filename": "input_data/pretraining/shakespeare.txt",
+        "language": "English",
+        "script": "Latin",
+    },
+    "Oscar Wilde": {
+        "filename": "input_data/pretraining/wilde.txt",
+        "language": "English",
+        "script": "Latin",
+    },
 }
 
 
@@ -223,15 +239,17 @@ PRETRAINING_DATA_SOURCES = {
 async def get_data_sources() -> dict:
     """Return available pretraining data sources with their stats."""
     sources = []
-    for name, filepath in PRETRAINING_DATA_SOURCES.items():
-        path = Path(filepath)
+    for name, info in PRETRAINING_DATA_SOURCES.items():
+        path = Path(info["filename"])
         if path.exists():
             content = path.read_text(encoding="utf-8")
             words = len(content.split())
             chars = len(content)
             sources.append({
                 "name": name,
-                "filename": filepath,
+                "filename": info["filename"],
+                "language": info["language"],
+                "script": info["script"],
                 "words": words,
                 "chars": chars,
             })
