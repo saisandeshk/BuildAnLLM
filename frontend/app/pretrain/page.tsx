@@ -581,7 +581,38 @@ export default function PretrainPage() {
             <table className="data-table" style={{ width: "100%", tableLayout: "fixed" }}>
               <thead>
                 <tr>
-                  <th style={{ width: 28 }}></th>
+                  <th style={{ width: 28 }}>
+                    <label className="checkbox" title="Select All / None">
+                      <input
+                        type="checkbox"
+                        checked={
+                          (dataSources.length > 0 || trainingFiles.length > 0) &&
+                          selectedDataSources.size === dataSources.length &&
+                          includedUploadedFiles.size === trainingFiles.length
+                        }
+                        ref={(input) => {
+                          if (input) {
+                            const totalItems = dataSources.length + trainingFiles.length;
+                            const selectedItems = selectedDataSources.size + includedUploadedFiles.size;
+                            input.indeterminate = selectedItems > 0 && selectedItems < totalItems;
+                          }
+                        }}
+                        onChange={(event) => {
+                          if (event.target.checked) {
+                            // Select all
+                            setSelectedDataSources(new Set(dataSources.map((s) => s.name)));
+                            setIncludedUploadedFiles(new Set(trainingFiles.map((f) => f.name)));
+                          } else {
+                            // Deselect all
+                            setSelectedDataSources(new Set());
+                            setIncludedUploadedFiles(new Set());
+                          }
+                        }}
+                        aria-label="Select all sources"
+                      />
+                      <span className="checkbox-box" aria-hidden="true" />
+                    </label>
+                  </th>
                   <th
                     style={{ width: "40%", cursor: "pointer" }}
                     onClick={() => {

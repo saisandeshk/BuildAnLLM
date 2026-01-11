@@ -131,6 +131,12 @@ describe("PretrainPage", () => {
       expect(screen.getByText("Test Author")).toBeInTheDocument();
     });
 
+    // Select the data source by clicking its checkbox
+    const checkbox = screen.getAllByRole("checkbox")[0];
+    await act(async () => {
+      fireEvent.click(checkbox);
+    });
+
     // Click Start Training wrapped in act
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Start Training" }));
@@ -215,6 +221,89 @@ describe("PretrainPage", () => {
       expect(screen.getByText("Muhammad al-Khwarizmi")).toBeInTheDocument();
     });
 
+    it("does not pre-select any data sources on page load", async () => {
+      fetchJsonMock.mockImplementation(async (path) => {
+        if (path === "/api/pretrain/data-sources") {
+          return { sources: mockDataSources };
+        }
+        if (path === "/api/docs/model-code") {
+          return { snippets: [] };
+        }
+        return {};
+      });
+
+      render(<PretrainPage />);
+
+      // Wait for data sources to load
+      await waitFor(() => {
+        expect(screen.getByText("George Orwell")).toBeInTheDocument();
+      });
+
+      // No checkboxes should be checked by default (excluding the Select All checkbox)
+      const checkboxes = screen.getAllByRole("checkbox");
+      const checkedBoxes = checkboxes.filter(
+        (cb) => (cb as HTMLInputElement).checked
+      );
+      expect(checkedBoxes.length).toBe(0);
+
+      // Start Training button should be disabled because no sources are selected
+      expect(screen.getByRole("button", { name: "Start Training" })).toBeDisabled();
+    });
+
+    it("has a Select All checkbox that selects all data sources when clicked", async () => {
+      fetchJsonMock.mockImplementation(async (path) => {
+        if (path === "/api/pretrain/data-sources") {
+          return { sources: mockDataSources };
+        }
+        if (path === "/api/docs/model-code") {
+          return { snippets: [] };
+        }
+        return {};
+      });
+
+      render(<PretrainPage />);
+
+      // Wait for data sources to load
+      await waitFor(() => {
+        expect(screen.getByText("George Orwell")).toBeInTheDocument();
+      });
+
+      // Find the Select All checkbox (aria-label="Select all sources")
+      const selectAllCheckbox = screen.getByLabelText("Select all sources");
+      expect(selectAllCheckbox).toBeInTheDocument();
+      expect(selectAllCheckbox).not.toBeChecked();
+
+      // Click Select All
+      await act(async () => {
+        fireEvent.click(selectAllCheckbox);
+      });
+
+      // All data source checkboxes should now be checked
+      const checkboxes = screen.getAllByRole("checkbox");
+      const checkedBoxes = checkboxes.filter(
+        (cb) => (cb as HTMLInputElement).checked
+      );
+      // Should have mockDataSources.length + 1 checked (including Select All)
+      expect(checkedBoxes.length).toBe(mockDataSources.length + 1);
+
+      // Start Training button should be enabled now
+      expect(screen.getByRole("button", { name: "Start Training" })).toBeEnabled();
+
+      // Click Select All again to deselect all
+      await act(async () => {
+        fireEvent.click(selectAllCheckbox);
+      });
+
+      // All checkboxes should now be unchecked
+      const uncheckedBoxes = screen.getAllByRole("checkbox").filter(
+        (cb) => (cb as HTMLInputElement).checked
+      );
+      expect(uncheckedBoxes.length).toBe(0);
+
+      // Start Training button should be disabled again
+      expect(screen.getByRole("button", { name: "Start Training" })).toBeDisabled();
+    });
+
     it("includes training_text_paths in job creation payload when sources selected", async () => {
       fetchJsonMock.mockImplementation(async (path) => {
         if (path === "/api/pretrain/data-sources") {
@@ -238,6 +327,12 @@ describe("PretrainPage", () => {
       // Wait for data sources to load
       await waitFor(() => {
         expect(screen.getByText("George Orwell")).toBeInTheDocument();
+      });
+
+      // Select the first data source (George Orwell) by clicking its checkbox
+      const checkbox = screen.getAllByRole("checkbox")[0];
+      await act(async () => {
+        fireEvent.click(checkbox);
       });
 
       // Start training using act
@@ -362,6 +457,15 @@ describe("PretrainPage", () => {
       await waitFor(() => {
         expect(screen.getByText("Test Source")).toBeInTheDocument();
       });
+
+      // Select the data source by clicking its checkbox
+      const checkbox = screen.getAllByRole("checkbox")[0];
+      await act(async () => {
+        fireEvent.click(checkbox);
+      });
+
+      // Now Start Training should be enabled
+      expect(screen.getByRole("button", { name: "Start Training" })).toBeEnabled();
 
       // Start training
       await act(async () => {

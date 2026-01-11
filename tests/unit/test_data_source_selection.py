@@ -13,6 +13,30 @@ from fastapi import UploadFile
 from backend.app.schemas.training import PretrainJobPayload
 
 
+@pytest.fixture
+def temp_data_files(tmp_path: Path) -> dict[str, Path]:
+    """Create temporary data files for testing."""
+    # Create source files
+    source1 = tmp_path / "source1.txt"
+    source1.write_text("Content from source one.")
+
+    source2 = tmp_path / "source2.txt"
+    source2.write_text("Content from source two.")
+
+    # Create a mock orwell file for the fallback test
+    input_data = tmp_path / "input_data" / "pretraining"
+    input_data.mkdir(parents=True, exist_ok=True)
+    orwell = input_data / "orwell.txt"
+    orwell.write_text("Default Orwell content.")
+
+    return {
+        "source1": source1,
+        "source2": source2,
+        "orwell": orwell,
+    }
+
+
+
 class TestPretrainJobPayloadSchema:
     """Tests for the PretrainJobPayload Pydantic model."""
 
@@ -130,7 +154,7 @@ class TestReadTrainingText:
         
         result = pretrain._read_training_text(None, [])
         
-        assert result == "Default Orwell text."
+        assert result == "Default Orwell content."
 
     def test_upload_only_works(self, mock_upload_file: UploadFile):
         """Verify upload file alone works without paths."""

@@ -379,6 +379,37 @@ def test_pretrain_job_with_upload_and_paths_combined(api_client: TestClient):
 
 
 @pytest.mark.integration
+def test_pretrain_job_cancel_endpoint(api_client: TestClient):
+    """Test the pretrain job cancel endpoint used by Stop/Reset button."""
+    # First create a job
+    payload = {
+        "model_config": ModelConfig.gpt_small().to_dict(),
+        "tokenizer_type": "character",
+        "use_einops": True,
+        "training": {
+            "batch_size": 2,
+            "epochs": 1,
+            "max_steps_per_epoch": 2,
+            "learning_rate": 1e-3,
+            "weight_decay": 0.0,
+            "eval_interval": 1,
+            "eval_iters": 1,
+            "save_interval": 10,
+        },
+        "training_text_paths": ["input_data/pretraining/orwell.txt"],
+        "auto_start": False,
+    }
+    create_response = api_client.post("/api/pretrain/jobs", data={"payload": json.dumps(payload)})
+    assert create_response.status_code == 200
+    job_id = create_response.json()["job_id"]
+
+    # Now cancel the job
+    cancel_response = api_client.post(f"/api/pretrain/jobs/{job_id}/cancel")
+    assert cancel_response.status_code == 200
+    assert cancel_response.json()["status"] == "canceled"
+
+
+@pytest.mark.integration
 def test_checkpoint_endpoints(api_client: TestClient, monkeypatch: pytest.MonkeyPatch):
     import backend.app.routers.checkpoints as checkpoints
 
