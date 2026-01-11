@@ -535,12 +535,12 @@ export default function PretrainPage() {
             <table className="data-table" style={{ width: "100%", tableLayout: "fixed" }}>
               <thead>
                 <tr>
-                  <th style={{ width: 40 }}></th>
-                  <th style={{ width: "30%" }}>Author</th>
-                  <th style={{ width: "15%" }}>Language</th>
-                  <th style={{ width: "15%" }}>Script</th>
-                  <th style={{ width: "15%", textAlign: "right" }}>Words</th>
-                  <th style={{ width: "15%", textAlign: "right" }}>Characters</th>
+                  <th style={{ width: 28 }}></th>
+                  <th style={{ width: "40%" }}>Author/Text</th>
+                  <th style={{ width: "12%" }}>Language</th>
+                  <th style={{ width: "10%" }}>Script</th>
+                  <th style={{ width: "14%", textAlign: "right" }}>Words</th>
+                  <th style={{ width: "14%", textAlign: "right" }}>Characters</th>
                 </tr>
               </thead>
               <tbody>

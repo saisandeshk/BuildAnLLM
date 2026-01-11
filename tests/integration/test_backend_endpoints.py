@@ -128,6 +128,17 @@ def api_client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> TestClient:
     csv_path = tmp_path / "data.csv"
     csv_path.write_text("prompt,response\nHi,Hello\n", encoding="utf-8")
 
+    # Create sample pretraining data files for data sources endpoint
+    pretraining_dir = tmp_path / "input_data" / "pretraining"
+    pretraining_dir.mkdir(parents=True, exist_ok=True)
+    (pretraining_dir / "orwell.txt").write_text("Sample George Orwell text for testing.", encoding="utf-8")
+    (pretraining_dir / "dickens.txt").write_text("Sample Charles Dickens text for testing.", encoding="utf-8")
+    (pretraining_dir / "shakespeare.txt").write_text("Sample William Shakespeare text for testing.", encoding="utf-8")
+    (pretraining_dir / "wilde.txt").write_text("Sample Oscar Wilde text for testing.", encoding="utf-8")
+    (pretraining_dir / "aljbr.txt").write_text("نموذج نص للاختبار", encoding="utf-8")
+    (pretraining_dir / "proust.txt").write_text("Texte d'exemple pour les tests.", encoding="utf-8")
+    (pretraining_dir / "donquixote.txt").write_text("Texto de ejemplo para pruebas.", encoding="utf-8")
+
     pretrain.job_registry = JobRegistry()
     finetune.job_registry = JobRegistry()
     inference.inference_registry = InferenceRegistry()
@@ -143,7 +154,7 @@ def api_client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> TestClient:
 
     monkeypatch.setattr(TrainingJob, "start", quiet_start)
 
-    monkeypatch.setattr(pretrain, "_read_training_text", lambda upload: "hello world")
+    monkeypatch.setattr(pretrain, "_read_training_text", lambda upload, paths=None: "hello world")
     monkeypatch.setattr(pretrain, "TransformerDataset", DummyDataset)
     monkeypatch.setattr(pretrain, "TransformerModel", DummyModel)
     monkeypatch.setattr(pretrain, "TransformerTrainer", DummyTrainer)
@@ -225,6 +236,69 @@ def test_tokenizer_endpoints(api_client: TestClient):
     )
     assert response.status_code == 200
     assert response.json()["token_count"] >= 1
+
+
+@pytest.mark.integration
+def test_data_sources_endpoint(api_client: TestClient):
+    """Test the GET /api/pretrain/data-sources endpoint."""
+    response = api_client.get("/api/pretrain/data-sources")
+    assert response.status_code == 200
+    
+    data = response.json()
+    assert "sources" in data
+    sources = data["sources"]
+    
+    # Should have multiple sources
+    assert len(sources) >= 1
+    
+    # Each source should have required fields
+    for source in sources:
+        assert "name" in source
+        assert "filename" in source
+        assert "language" in source
+        assert "script" in source
+        assert "words" in source
+        assert "chars" in source
+
+
+@pytest.mark.integration
+def test_data_sources_include_multilingual(api_client: TestClient):
+    """Test that data sources include non-English sources."""
+    response = api_client.get("/api/pretrain/data-sources")
+    assert response.status_code == 200
+    
+    sources = response.json()["sources"]
+    source_names = [s["name"] for s in sources]
+    
+    # Check for multilingual sources
+    assert "Muhammad al-Khwarizmi" in source_names
+    assert "Marcel Proust" in source_names
+    assert "Miguel de Cervantes" in source_names
+
+
+@pytest.mark.integration
+def test_pretrain_job_with_training_text_paths(api_client: TestClient):
+    """Test creating a pretrain job with specific training_text_paths."""
+    payload = {
+        "model_config": ModelConfig.gpt_small().to_dict(),
+        "tokenizer_type": "character",
+        "use_einops": True,
+        "training": {
+            "batch_size": 2,
+            "epochs": 1,
+            "max_steps_per_epoch": 2,
+            "learning_rate": 1e-3,
+            "weight_decay": 0.0,
+            "eval_interval": 1,
+            "eval_iters": 1,
+            "save_interval": 10,
+        },
+        "training_text_paths": ["input_data/pretraining/orwell.txt"],
+        "auto_start": False,
+    }
+    response = api_client.post("/api/pretrain/jobs", data={"payload": json.dumps(payload)})
+    assert response.status_code == 200
+    assert "job_id" in response.json()
 
 
 @pytest.mark.integration

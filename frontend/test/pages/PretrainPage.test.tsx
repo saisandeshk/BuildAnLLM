@@ -52,9 +52,25 @@ const fetchJsonMock = vi.mocked(fetchJson);
 const useDemoModeMock = vi.mocked(useDemoMode);
 
 describe("PretrainPage", () => {
+  const defaultDataSources = {
+    sources: [
+      { name: "Test Author", filename: "test.txt", language: "English", script: "Latin", words: 100, chars: 500 },
+    ],
+  };
+
   beforeEach(() => {
     fetchJsonMock.mockReset();
     useDemoModeMock.mockReturnValue(false);
+    // Default mock that handles common endpoints
+    fetchJsonMock.mockImplementation(async (path) => {
+      if (path === "/api/pretrain/data-sources") {
+        return defaultDataSources;
+      }
+      if (path === "/api/docs/model-code") {
+        return { snippets: [] };
+      }
+      return {};
+    });
   });
 
   afterEach(() => {
@@ -62,7 +78,6 @@ describe("PretrainPage", () => {
   });
 
   it("switches tokenizer when preset changes", () => {
-    fetchJsonMock.mockResolvedValue({ snippets: [] });
     render(<PretrainPage />);
 
     fireEvent.click(screen.getByRole("button", { name: "LLaMA 4" }));
@@ -73,6 +88,9 @@ describe("PretrainPage", () => {
   it("loads code snippets after debounce", async () => {
     vi.useFakeTimers();
     fetchJsonMock.mockImplementation(async (path) => {
+      if (path === "/api/pretrain/data-sources") {
+        return defaultDataSources;
+      }
       if (path === "/api/docs/model-code") {
         return { snippets: [{ title: "Snippet A" }] };
       }
@@ -90,6 +108,9 @@ describe("PretrainPage", () => {
 
   it("starts a training job with form data payload", async () => {
     fetchJsonMock.mockImplementation(async (path) => {
+      if (path === "/api/pretrain/data-sources") {
+        return defaultDataSources;
+      }
       if (path === "/api/pretrain/jobs") {
         return {
           job_id: "job-1",
@@ -104,14 +125,26 @@ describe("PretrainPage", () => {
     });
 
     render(<PretrainPage />);
-    fireEvent.click(screen.getByRole("button", { name: "Start Training" }));
 
+    // Wait for data sources to load first
     await waitFor(() => {
-      expect(fetchJsonMock).toHaveBeenCalledWith(
-        "/api/pretrain/jobs",
-        expect.objectContaining({ method: "POST" })
-      );
+      expect(screen.getByText("Test Author")).toBeInTheDocument();
     });
+
+    // Click Start Training wrapped in act
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Start Training" }));
+    });
+
+    await waitFor(
+      () => {
+        expect(fetchJsonMock).toHaveBeenCalledWith(
+          "/api/pretrain/jobs",
+          expect.objectContaining({ method: "POST" })
+        );
+      },
+      { timeout: 3000 }
+    );
 
     const call = fetchJsonMock.mock.calls.find(([path]) => path === "/api/pretrain/jobs");
     const form = call?.[1]?.body as FormData;
@@ -123,6 +156,9 @@ describe("PretrainPage", () => {
   it("disables training controls in demo mode", () => {
     useDemoModeMock.mockReturnValue(true);
     fetchJsonMock.mockImplementation(async (path) => {
+      if (path === "/api/pretrain/data-sources") {
+        return defaultDataSources;
+      }
       if (path === "/api/docs/model-code") {
         return { snippets: [] };
       }
@@ -134,5 +170,117 @@ describe("PretrainPage", () => {
     expect(screen.getByRole("button", { name: "Start Training" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Step" })).toBeDisabled();
     expect(screen.getByText("Demo mode: pre-training disabled.")).toBeInTheDocument();
+  });
+
+  describe("data source selection", () => {
+    const mockDataSources = [
+      {
+        name: "George Orwell",
+        filename: "input_data/pretraining/orwell.txt",
+        language: "English",
+        script: "Latin",
+        words: 1000,
+        chars: 5000,
+      },
+      {
+        name: "Muhammad al-Khwarizmi",
+        filename: "input_data/pretraining/aljbr.txt",
+        language: "Arabic",
+        script: "Arabic",
+        words: 500,
+        chars: 2500,
+      },
+    ];
+
+    it("renders data sources table with language and script columns", async () => {
+      fetchJsonMock.mockImplementation(async (path) => {
+        if (path === "/api/pretrain/data-sources") {
+          return { sources: mockDataSources };
+        }
+        if (path === "/api/docs/model-code") {
+          return { snippets: [] };
+        }
+        return {};
+      });
+
+      render(<PretrainPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText("George Orwell")).toBeInTheDocument();
+      });
+
+      // Check for language/script columns (Arabic appears twice - language and script)
+      expect(screen.getByText("English")).toBeInTheDocument();
+      expect(screen.getAllByText("Arabic").length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByText("Muhammad al-Khwarizmi")).toBeInTheDocument();
+    });
+
+    it("includes training_text_paths in job creation payload when sources selected", async () => {
+      fetchJsonMock.mockImplementation(async (path) => {
+        if (path === "/api/pretrain/data-sources") {
+          return { sources: mockDataSources };
+        }
+        if (path === "/api/pretrain/jobs") {
+          return {
+            job_id: "job-1",
+            kind: "pretrain",
+            status: "paused",
+            iter: 0,
+            max_iters: 10,
+            created_at: 0,
+          };
+        }
+        return { snippets: [] };
+      });
+
+      render(<PretrainPage />);
+
+      // Wait for data sources to load
+      await waitFor(() => {
+        expect(screen.getByText("George Orwell")).toBeInTheDocument();
+      });
+
+      // Start training using act
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Start Training" }));
+      });
+
+      // Allow async operations to complete
+      await waitFor(
+        () => {
+          const jobsCalls = fetchJsonMock.mock.calls.filter(([p]) => p === "/api/pretrain/jobs");
+          expect(jobsCalls.length).toBeGreaterThan(0);
+        },
+        { timeout: 3000 }
+      );
+
+      // Find the job creation call and verify training_text_paths is included
+      const call = fetchJsonMock.mock.calls.find(([path]) => path === "/api/pretrain/jobs");
+      const form = call?.[1]?.body as FormData;
+      const payload = JSON.parse(String(form.get("payload")));
+      
+      // Should include training_text_paths with selected sources
+      expect(payload).toHaveProperty("training_text_paths");
+      expect(Array.isArray(payload.training_text_paths)).toBe(true);
+    });
+
+    it("shows word and character counts for data sources", async () => {
+      fetchJsonMock.mockImplementation(async (path) => {
+        if (path === "/api/pretrain/data-sources") {
+          return { sources: mockDataSources };
+        }
+        return { snippets: [] };
+      });
+
+      render(<PretrainPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText("George Orwell")).toBeInTheDocument();
+      });
+
+      // Check for word counts (may appear multiple times in different rows)
+      expect(screen.getAllByText("1,000").length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText("5,000").length).toBeGreaterThanOrEqual(1);
+    });
   });
 });

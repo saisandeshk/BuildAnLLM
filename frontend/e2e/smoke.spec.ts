@@ -48,6 +48,20 @@ async function mockApi(page: Page) {
       return;
     }
 
+    if (path === "/api/pretrain/data-sources") {
+      await route.fulfill({
+        status: 200,
+        headers: corsHeaders,
+        contentType: "application/json",
+        body: JSON.stringify({
+          sources: [
+            { name: "George Orwell", filename: "orwell.txt", language: "English", script: "Latin", words: 1000, chars: 5000 },
+          ],
+        }),
+      });
+      return;
+    }
+
     if (path === "/api/docs/model-code" || path === "/api/docs/finetuning-code" || path === "/api/docs/inference-code") {
       await route.fulfill({
         status: 200,

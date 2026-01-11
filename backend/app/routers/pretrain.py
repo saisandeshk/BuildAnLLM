@@ -232,37 +232,42 @@ def _format_sse(event: str, data: dict) -> str:
 
 # Define available pretraining data sources with metadata
 PRETRAINING_DATA_SOURCES = {
-    "Charles Dickens": {
+    "Charles Dickens Collection": {
         "filename": "input_data/pretraining/dickens.txt",
         "language": "English",
         "script": "Latin",
     },
-    "George Orwell": {
+    "Vyasa's Bhagavad Gita": {
+        "filename": "input_data/pretraining/gita.txt",
+        "language": "Sanskrit",
+        "script": "Devanagari",
+    },
+    "George Orwell Collection": {
         "filename": "input_data/pretraining/orwell.txt",
         "language": "English",
         "script": "Latin",
     },
-    "William Shakespeare": {
+    "William Shakespeare Collection": {
         "filename": "input_data/pretraining/shakespeare.txt",
         "language": "English",
         "script": "Latin",
     },
-    "Oscar Wilde": {
+    "Oscar Wilde Collection": {
         "filename": "input_data/pretraining/wilde.txt",
         "language": "English",
         "script": "Latin",
     },
-    "Muhammad al-Khwarizmi": {
+    "Muhammad al-Khwarizmi's Al-Jabr": {
         "filename": "input_data/pretraining/aljbr.txt",
         "language": "Arabic",
         "script": "Arabic",
     },
-    "Marcel Proust": {
+    "Marcel Proust's Swann's Way": {
         "filename": "input_data/pretraining/proust.txt",
         "language": "French",
         "script": "Latin",
     },
-    "Miguel de Cervantes": {
+    "Miguel de Cervantes's Don Quixote": {
         "filename": "input_data/pretraining/donquixote.txt",
         "language": "Spanish",
         "script": "Latin",
