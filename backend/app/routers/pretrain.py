@@ -237,6 +237,21 @@ PRETRAINING_DATA_SOURCES = {
         "language": "English",
         "script": "Latin",
     },
+    "Ida B. Wells Collection": {
+        "filename": "input_data/pretraining/wells.txt",
+        "language": "English",
+        "script": "Latin",
+    },
+    "Virginia Woolf's Mrs. Dalloway": {
+        "filename": "input_data/pretraining/woolf.txt",
+        "language": "English",
+        "script": "Latin",
+    },
+    "Jane Austen Collection": {
+        "filename": "input_data/pretraining/austen.txt",
+        "language": "English",
+        "script": "Latin",
+    },
     "Aryabhata's Aryabhatiyam": {
         "filename": "input_data/pretraining/aryabhata.txt",
         "language": "Sanskrit",
