@@ -32,3 +32,5 @@ requirements.txt
 
 # Tests
 .hypothesis/
+test-results/
+playwright-report/

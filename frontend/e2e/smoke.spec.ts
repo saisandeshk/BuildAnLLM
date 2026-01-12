@@ -173,13 +173,13 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("pretrain page renders base sections", async ({ page }) => {
-  await page.goto("/pretrain");
+  await page.goto("/pretrain", { waitUntil: "networkidle" });
   await expect(page.getByRole("heading", { name: "Training Data" })).toBeVisible();
   await expect(page.getByRole("button", { name: "GPT-2" })).toBeVisible();
 });
 
 test("pretrain page shows multi-file upload interface", async ({ page }) => {
-  await page.goto("/pretrain");
+  await page.goto("/pretrain", { waitUntil: "networkidle" });
 
   // Check file upload section is visible
   await expect(page.getByText("Upload Custom Files")).toBeVisible();
@@ -201,20 +201,20 @@ test("pretrain page shows multi-file upload interface", async ({ page }) => {
 
 test("finetune page loads latest checkpoint", async ({ page }) => {
 
-  await page.goto("/finetune");
+  await page.goto("/finetune", { waitUntil: "networkidle" });
   const checkpointSelect = page.locator("section#checkpoint select");
   await expect(checkpointSelect).toHaveValue("ckpt-1");
   await expect(page.getByRole("button", { name: "LoRA" })).toBeVisible();
 });
 
 test("inference page loads diagnostics data", async ({ page }) => {
-  await page.goto("/inference");
+  await page.goto("/inference", { waitUntil: "networkidle" });
   await expect(page.getByRole("button", { name: "Generate" })).toBeEnabled();
   await expect(page.getByText(/1\. A/)).toBeVisible();
 });
 
 test("playground page shows tokenized output", async ({ page }) => {
-  await page.goto("/playground");
+  await page.goto("/playground", { waitUntil: "networkidle" });
   await expect(page.getByRole("heading", { name: "Tokenizer" })).toBeVisible();
   await expect(page.getByText("Hi", { exact: true })).toBeVisible();
 });
