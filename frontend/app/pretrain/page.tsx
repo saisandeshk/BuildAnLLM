@@ -7,6 +7,7 @@ import Heatmap from "../../components/Heatmap";
 import LogBox from "../../components/LogBox";
 import MarkdownBlock from "../../components/MarkdownBlock";
 import LineChart from "../../components/LineChart";
+import Modal from "../../components/Modal";
 import RangeSlider from "../../components/RangeSlider";
 import SideNav from "../../components/SideNav";
 import StatCard from "../../components/StatCard";
@@ -123,6 +124,38 @@ export default function PretrainPage() {
   const inspectThrottleRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inspectMaxTokens = 128;
+
+  // Text preview modal state
+  const [previewModalOpen, setPreviewModalOpen] = useState(false);
+  const [previewContent, setPreviewContent] = useState<{ name: string; content: string } | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  const openPreview = async (name: string, file?: File) => {
+    setPreviewLoading(true);
+    setPreviewModalOpen(true);
+    try {
+      if (file) {
+        // For uploaded files, read from the File object directly
+        const content = await file.text();
+        setPreviewContent({ name, content });
+      } else {
+        // For built-in sources, fetch from backend
+        const data = await fetchJson<{ name: string; content: string }>(
+          `/api/pretrain/data-sources/${encodeURIComponent(name)}/content`
+        );
+        setPreviewContent(data);
+      }
+    } catch (err) {
+      setPreviewContent({ name, content: `Error loading content: ${(err as Error).message}` });
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const closePreview = () => {
+    setPreviewModalOpen(false);
+    setPreviewContent(null);
+  };
 
   const ssePath = job ? `/api/pretrain/jobs/${job.job_id}/events` : undefined;
   const { lastEvent, error: sseError } = useSse(ssePath, Boolean(job));
@@ -546,6 +579,7 @@ export default function PretrainPage() {
   }, [attnLayer, attnHead, job, isRunning, inspectData]);
 
   return (
+    <>
     <div className="page-with-nav">
       <SideNav
         sections={pretrainSections}
@@ -707,7 +741,14 @@ export default function PretrainPage() {
                       </td>
                       <td>
                         <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          <span
+                            className="text-link"
+                            style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                            onClick={() => openPreview(file.name, file)}
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={(e) => e.key === "Enter" && openPreview(file.name, file)}
+                          >
                             📄 {file.name}
                           </span>
                           <button
@@ -773,7 +814,17 @@ export default function PretrainPage() {
                         <span className="checkbox-box" aria-hidden="true" />
                       </label>
                     </td>
-                    <td>{source.name}</td>
+                    <td>
+                      <span
+                        className="text-link"
+                        onClick={() => openPreview(source.name)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => e.key === "Enter" && openPreview(source.name)}
+                      >
+                        {source.name}
+                      </span>
+                    </td>
                     <td>{source.language}</td>
                     <td>{source.script}</td>
                     <td style={{ textAlign: "right" }}>{source.words.toLocaleString()}</td>
@@ -1537,5 +1588,14 @@ export default function PretrainPage() {
       </section>
       </div>
     </div>
+
+      <Modal isOpen={previewModalOpen} onClose={closePreview} title={previewContent?.name || "Preview"}>
+        {previewLoading ? (
+          <p>Loading...</p>
+        ) : previewContent ? (
+          <div className="text-preview">{previewContent.content}</div>
+        ) : null}
+      </Modal>
+    </>
   );
 }

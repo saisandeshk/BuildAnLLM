@@ -319,3 +319,18 @@ async def get_data_sources() -> dict:
                 "chars": chars,
             })
     return {"sources": sources}
+
+
+@router.get("/data-sources/{name}/content")
+async def get_data_source_content(name: str) -> dict:
+    """Return the full text content of a data source by name."""
+    if name not in PRETRAINING_DATA_SOURCES:
+        raise HTTPException(status_code=404, detail=f"Data source '{name}' not found")
+    
+    info = PRETRAINING_DATA_SOURCES[name]
+    path = Path(info["filename"])
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"File for '{name}' not found")
+    
+    content = path.read_text(encoding="utf-8")
+    return {"name": name, "content": content}

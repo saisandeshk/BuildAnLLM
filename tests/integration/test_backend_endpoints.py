@@ -705,3 +705,37 @@ def test_demo_mode_blocks_pretrain_job_operations(api_client: TestClient, monkey
     # Events should be blocked
     response = api_client.get("/api/pretrain/jobs/fake-job-id/events")
     assert response.status_code == 403
+
+
+@pytest.mark.integration
+def test_data_source_content_endpoint(api_client: TestClient):
+    """Test the GET /api/pretrain/data-sources/{name}/content endpoint."""
+    # Test with a known data source
+    response = api_client.get("/api/pretrain/data-sources/George%20Orwell%20Collection/content")
+    assert response.status_code == 200
+    
+    data = response.json()
+    assert "name" in data
+    assert "content" in data
+    assert data["name"] == "George Orwell Collection"
+    assert len(data["content"]) > 0
+
+
+@pytest.mark.integration
+def test_data_source_content_endpoint_not_found(api_client: TestClient):
+    """Test the content endpoint returns 404 for unknown data sources."""
+    response = api_client.get("/api/pretrain/data-sources/Unknown%20Source/content")
+    assert response.status_code == 404
+    assert "not found" in response.json()["detail"].lower()
+
+
+@pytest.mark.integration
+def test_data_source_content_works_in_demo_mode(api_client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    """Test that data source content endpoint works in demo mode (read-only)."""
+    monkeypatch.setenv("DEMO_MODE", "true")
+    
+    response = api_client.get("/api/pretrain/data-sources/George%20Orwell%20Collection/content")
+    assert response.status_code == 200
+    
+    data = response.json()
+    assert "content" in data
